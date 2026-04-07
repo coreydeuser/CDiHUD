@@ -1,0 +1,1605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Late Model HUD</title>
+<style>
+:root{
+  --bg:#080808;--p1:#131313;--p2:#1c1c1c;--bd:#2a2a2a;
+  --acc:#cc1111;--accH:#ff2a2a;--txt:#eeeeee;--dim:#606060;
+  --grn:#1fa84a;--inp:#0d0d0d;--btn:#1e1e1e;
+  --ih:36px;--wh:26px;--r:5px;
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Segoe UI',Arial,sans-serif;font-size:11px;overflow:hidden}
+input,textarea,button,select{font-family:inherit}
+
+/* SHELL */
+#shell{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+/* TOPBAR */
+#topbar{background:#0c0c0c;border-bottom:2px solid var(--acc);padding:3px 6px;
+  display:flex;align-items:center;gap:4px;flex-shrink:0;min-height:34px;
+  overflow-x:auto;scrollbar-width:none}
+#topbar::-webkit-scrollbar{display:none}
+#logo-area{display:flex;align-items:center;gap:5px;cursor:pointer;flex-shrink:0;min-width:60px}
+#logo-area:active{opacity:.75}
+#logo-img{height:24px;object-fit:contain;display:none;border-radius:3px}
+#logo-text{font-size:12px;font-weight:900;color:var(--acc);letter-spacing:2px;white-space:nowrap}
+#logo-hint{font-size:8px;color:var(--dim);white-space:nowrap}
+.vsep{width:1px;background:var(--bd);height:16px;flex-shrink:0}
+#sess-btn{background:#1a0303;border:1px solid var(--acc);color:var(--acc);border-radius:4px;
+  padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;touch-action:manipulation;
+  min-height:24px;white-space:nowrap;flex-shrink:0;letter-spacing:.5px}
+#sess-btn:active{background:#2a0505}
+.gap{flex:1;min-width:3px}
+.tb{background:var(--btn);border:1px solid var(--bd);color:var(--txt);border-radius:4px;
+  padding:2px 7px;font-size:10px;cursor:pointer;touch-action:manipulation;
+  min-height:24px;white-space:nowrap;flex-shrink:0}
+.tb:active{background:#2a2a2a}
+.tb.red{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:700}
+.tb.red:active{background:var(--accH)}
+.ebadge{background:var(--accH);color:#fff;font-size:9px;font-weight:800;
+  padding:1px 5px;border-radius:3px;letter-spacing:1px;display:none;flex-shrink:0;
+  animation:blink 1s ease-in-out infinite alternate}
+@keyframes blink{from{opacity:1}to{opacity:.4}}
+
+/* RUN STRIP */
+#strip{background:#0a0a0a;border-bottom:1px solid var(--bd);display:flex;
+  align-items:stretch;overflow-x:auto;overflow-y:hidden;flex-shrink:0;
+  min-height:52px;max-height:52px;scrollbar-width:none}
+#strip::-webkit-scrollbar{display:none}
+#rcards{display:flex;align-items:stretch;flex-shrink:0}
+.rcard{display:flex;flex-direction:column;justify-content:center;padding:4px 10px;
+  border-right:1px solid var(--bd);min-width:98px;cursor:pointer;
+  touch-action:manipulation;flex-shrink:0;border-bottom:3px solid transparent}
+.rcard.active{background:#120202;border-bottom-color:var(--acc)}
+.rcard:active{background:#180303}
+.rn{font-size:8px;font-weight:800;color:var(--dim);letter-spacing:1px;text-transform:uppercase}
+.rcard.active .rn{color:var(--acc)}
+.rt{font-size:13px;font-weight:900;letter-spacing:.5px;line-height:1.2}
+.rcard.active .rt{color:var(--accH)}
+.rl{font-size:8px;color:var(--dim);margin-top:1px}
+.radd{display:flex;align-items:center;justify-content:center;padding:0 12px;
+  color:var(--grn);font-size:18px;min-width:36px;cursor:pointer;
+  touch-action:manipulation;flex-shrink:0;border-right:1px solid var(--bd)}
+.radd:active{background:#0a180a}
+
+/* DASHBOARD */
+#dash{flex:1;position:relative;overflow:hidden;background:var(--bg)}
+
+/* WIDGET */
+.widget{position:absolute;background:var(--p1);border:1px solid var(--bd);
+  border-radius:var(--r);overflow:hidden;display:flex;flex-direction:column;
+  min-width:140px;min-height:80px;box-shadow:0 2px 10px rgba(0,0,0,.5);z-index:10}
+.edit-on .widget{border-color:rgba(180,20,20,.4)}
+.widget.dragging{opacity:.82;z-index:500!important;box-shadow:0 12px 40px rgba(0,0,0,.8)}
+
+/* Widget header */
+.wh{background:#181818;border-bottom:1px solid var(--bd);height:var(--wh);
+  display:flex;align-items:center;gap:3px;padding:0 5px;flex-shrink:0;
+  user-select:none;-webkit-user-select:none}
+.wt{font-size:10px;font-weight:700;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--txt)}
+.wbtn{display:none;background:none;border:none;color:var(--dim);font-size:12px;cursor:pointer;
+  padding:1px 3px;line-height:1;touch-action:manipulation;border-radius:3px;min-height:20px;align-items:center;justify-content:center}
+.wbtn:hover{color:var(--txt);background:rgba(255,255,255,.07)}
+.wbtn:active{color:var(--acc)}
+.edit-on .wh{cursor:grab}
+.edit-on .wh:active{cursor:grabbing}
+.edit-on .wbtn{display:flex}
+
+/* Widget body */
+.wb{flex:1;overflow-y:auto;overflow-x:hidden;padding:6px;scrollbar-width:thin;scrollbar-color:var(--bd) transparent}
+.wb::-webkit-scrollbar{width:3px}
+.wb::-webkit-scrollbar-thumb{background:var(--bd)}
+
+/* Resize handle */
+.wr{position:absolute;bottom:0;right:0;width:18px;height:18px;cursor:se-resize;display:none;touch-action:none;z-index:20}
+.wr::after{content:'';position:absolute;bottom:3px;right:3px;width:8px;height:8px;border-right:2px solid var(--acc);border-bottom:2px solid var(--acc)}
+.edit-on .widget .wr{display:block}
+
+/* Ghost */
+#ghost{position:absolute;background:rgba(180,17,17,.1);border:2px dashed var(--acc);border-radius:var(--r);pointer-events:none;display:none;z-index:490}
+
+/* FIELDS */
+.field{display:flex;flex-direction:column;gap:1px}
+.field label,.flbl{font-size:8px;font-weight:800;color:var(--dim);letter-spacing:.5px;text-transform:uppercase}
+.field input[type=text],.field input[type=date],.field input[type=number],.field textarea{
+  background:var(--inp);border:1px solid var(--bd);color:var(--txt);
+  border-radius:4px;padding:3px 5px;font-size:12px;width:100%;
+  min-height:var(--ih);outline:none;-webkit-appearance:none}
+.field input:focus,.field textarea:focus{border-color:var(--acc);background:#160303}
+.field textarea{resize:vertical;min-height:50px;font-size:11px;line-height:1.4}
+
+/* STEPPER */
+.sp{display:flex;align-items:stretch;border:1px solid var(--bd);border-radius:4px;overflow:hidden;background:var(--inp)}
+.sp input[type=number]{flex:1;border:none;border-left:1px solid var(--bd);border-right:1px solid var(--bd);
+  border-radius:0;text-align:center;min-height:var(--ih);font-size:13px;font-weight:700;
+  background:var(--inp);color:var(--txt);-moz-appearance:textfield;width:0;outline:none}
+.sp input:focus{background:#160303;border-color:var(--acc)}
+.sp input::-webkit-inner-spin-button,.sp input::-webkit-outer-spin-button{-webkit-appearance:none}
+.spb{background:#2a0404;border:none;color:var(--acc);font-size:17px;font-weight:700;line-height:1;
+  min-width:var(--ih);min-height:var(--ih);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;touch-action:manipulation;user-select:none;-webkit-user-select:none;flex-shrink:0}
+.spb:active{background:var(--acc);color:#fff}
+/* XS stepper for tire temps */
+.sp.xs .spb{min-width:26px;min-height:26px;font-size:14px}
+.sp.xs input[type=number]{min-height:26px;font-size:10px;font-weight:700}
+
+/* FRACTION STEPPER */
+.fsp{display:flex;align-items:stretch;border:1px solid var(--bd);border-radius:4px;overflow:hidden;background:var(--inp)}
+.fsp-disp{flex:1;text-align:center;min-height:var(--ih);font-size:14px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;background:var(--inp);color:var(--txt);
+  border-left:1px solid var(--bd);border-right:1px solid var(--bd)}
+
+/* TIRE 2x2 GRID */
+.t2x2{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.tc{background:var(--p2);border:1px solid var(--bd);border-radius:4px;padding:4px 5px}
+.tc .cl{font-size:10px;font-weight:800;color:var(--acc);margin-bottom:3px;letter-spacing:1px}
+/* Compact tire temp layout */
+.tt-row{display:flex;gap:3px}
+.tt-cell{flex:1;min-width:0}
+.tt-lbl{font-size:7px;font-weight:800;color:var(--dim);text-align:center;text-transform:uppercase;letter-spacing:.3px;margin-bottom:1px}
+
+/* BUILDS DISPLAY */
+.builds-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.build-cell{background:var(--p2);border:1px solid var(--bd);border-radius:4px;padding:4px 6px;text-align:center}
+.build-lbl{font-size:8px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+.build-val{font-size:14px;font-weight:900;margin-top:2px}
+.build-val.pos{color:var(--grn)}
+.build-val.neg{color:var(--acc)}
+.build-val.zero{color:var(--dim)}
+
+/* STAGGER CALC */
+.stag-calc{background:var(--p2);border:1px solid var(--bd);border-radius:4px;padding:6px;margin-top:6px}
+.stag-row{display:flex;justify-content:space-around}
+.stag-item{text-align:center}
+.stag-item .sl{font-size:8px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+.stag-item .sv{font-size:15px;font-weight:900;color:var(--accH);margin-top:2px}
+
+/* TEMP ITEM */
+.temp-item{margin-bottom:5px}
+.temp-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px}
+.temp-item .tname{font-size:9px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+.temp-item .tremove{background:none;border:none;color:var(--acc);cursor:pointer;font-size:12px;padding:0 2px;touch-action:manipulation;line-height:1}
+
+/* LAP TIME LIST */
+.lap-row{display:flex;align-items:center;gap:6px;padding:3px 0;border-bottom:1px solid var(--bd)}
+.lap-row:last-child{border-bottom:none}
+.lap-num{font-size:9px;color:var(--dim);min-width:20px;font-weight:700}
+.lap-time{font-size:14px;font-weight:700;flex:1;color:var(--txt)}
+.lap-time.fastest{color:var(--acc)}
+.lap-del{background:none;border:none;color:var(--dim);cursor:pointer;font-size:13px;padding:0 3px;touch-action:manipulation}
+.lap-del:active{color:var(--acc)}
+.lap-add-row{display:flex;gap:5px;margin-top:7px}
+.lap-inp{background:var(--inp);border:1px solid var(--bd);color:var(--txt);border-radius:4px;
+  padding:5px 8px;font-size:14px;flex:1;outline:none;min-height:var(--ih)}
+.lap-inp:focus{border-color:var(--acc)}
+
+/* NOTES CANVAS */
+.notes-toolbar{display:flex;align-items:center;gap:5px;margin-bottom:5px;flex-wrap:wrap}
+.notes-lbl-btn{background:var(--acc);color:#fff;border:none;border-radius:4px;
+  padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer;touch-action:manipulation}
+.notes-lbl-btn:active{background:var(--accH)}
+.canvas-wrap{position:relative;width:100%;border:1px solid var(--bd);border-radius:4px;overflow:hidden;background:#111;touch-action:none}
+#notes-cvs{display:block;width:100%;height:100px;cursor:crosshair}
+.canvas-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--dim);pointer-events:none;letter-spacing:.5px}
+
+/* CROSS MEMBER DISPLAY */
+.xmem-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+
+/* SECTION LABEL */
+.sec{font-size:8px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:1px;
+  margin-bottom:4px;padding-bottom:2px;border-bottom:1px solid var(--bd)}
+.sec.nb{border-bottom:none;padding-bottom:0;margin-bottom:3px}
+
+/* GRID HELPERS */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px}
+.mb{margin-bottom:5px}
+
+/* CALC DISPLAY */
+.calc-row{display:flex;gap:5px;margin-top:3px}
+.calc-cell{flex:1;background:var(--p2);border:1px solid var(--bd);border-radius:4px;padding:3px 5px;text-align:center}
+.calc-cell .cl{font-size:8px;color:var(--dim);font-weight:800;text-transform:uppercase;letter-spacing:.5px}
+.calc-cell .cv{font-size:13px;font-weight:900;color:var(--accH)}
+
+/* MODALS */
+.modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:600;
+  align-items:center;justify-content:center;padding:12px}
+.modal.open{display:flex}
+.mbox{background:var(--p1);border:1px solid var(--acc);border-radius:10px;
+  padding:16px;width:100%;max-width:440px;max-height:90vh;overflow-y:auto}
+.mbox.wide{max-width:600px}
+.mt{font-size:13px;font-weight:800;color:var(--acc);margin-bottom:11px;letter-spacing:1px}
+.msub{font-size:10px;font-weight:800;color:var(--dim);letter-spacing:1px;text-transform:uppercase;margin:10px 0 6px}
+.pi{background:var(--inp);border:1px solid var(--bd);border-radius:5px;
+  padding:8px 11px;margin-bottom:5px;cursor:pointer;display:flex;align-items:center;justify-content:space-between}
+.pi:active{background:#160303;border-color:var(--acc)}
+.pn{font-size:12px;font-weight:600}
+.pbg{font-size:10px;color:var(--grn);font-weight:700}
+.pi.off .pbg{color:var(--dim)}
+.mi{background:var(--inp);border:1px solid var(--bd);color:var(--txt);border-radius:5px;
+  padding:6px 10px;font-size:12px;width:100%;margin-bottom:6px;outline:none}
+.mi:focus{border-color:var(--acc)}
+select.mi{cursor:pointer}
+.mhr{border:none;border-top:1px solid var(--bd);margin:10px 0}
+.mbtns{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap}
+
+/* SESSION CARDS */
+.sess-card{background:var(--inp);border:1px solid var(--bd);border-radius:5px;
+  padding:10px 12px;margin-bottom:6px;cursor:pointer;position:relative}
+.sess-card.current{border-color:var(--acc);background:#140303}
+.sess-card:active{background:#1a0303}
+.sess-name{font-size:13px;font-weight:700;color:var(--txt)}
+.sess-meta{font-size:10px;color:var(--dim);margin-top:2px}
+.sess-del{position:absolute;top:8px;right:8px;background:none;border:none;color:var(--dim);
+  font-size:14px;cursor:pointer;padding:2px 4px;touch-action:manipulation}
+.sess-del:active{color:var(--acc)}
+
+/* TOAST */
+#toast{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);background:var(--grn);
+  color:#fff;padding:6px 18px;border-radius:20px;font-weight:700;font-size:12px;
+  z-index:700;opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap}
+#toast.show{opacity:1}
+
+/* PRINT */
+#pview{display:none}
+@media print{
+  *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+  html,body{overflow:visible!important;height:auto!important;background:#fff!important;color:#000!important;font-size:10px}
+  #shell{display:none!important}
+  #pview{display:block!important;padding:14px;font-family:'Segoe UI',Arial,sans-serif}
+  .ph1{text-align:center;margin-bottom:10px}
+  .ph1 h1{font-size:18px;font-weight:900;letter-spacing:2px;color:#cc1111}
+  .ph1 h2{font-size:11px;color:#555;margin-top:2px}
+  .psess{display:flex;flex-wrap:wrap;gap:4px 14px;margin-bottom:10px;border:1px solid #ddd;border-radius:4px;padding:7px 10px}
+  .psess div{min-width:100px}
+  .psess label{font-size:8px;font-weight:700;color:#888;text-transform:uppercase;display:block}
+  .psess span{font-size:11px;font-weight:700}
+  .psect{font-size:8px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#cc1111;margin:8px 0 4px;border-left:3px solid #cc1111;padding-left:6px}
+  .ptbl{width:100%;border-collapse:collapse;margin-bottom:8px;page-break-inside:avoid}
+  .ptbl th{background:#cc1111!important;color:#fff!important;padding:4px 6px;font-size:9px;font-weight:700;text-align:center;border:1px solid #bbb}
+  .ptbl th.rh{background:#333!important}
+  .ptbl td{padding:3px 6px;font-size:9px;border:1px solid #ddd;text-align:center}
+  .ptbl tr:nth-child(even) td{background:#f9f9f9}
+  .ptbl td.rh{font-weight:700;text-align:left;background:#f4f4f4!important;color:#333}
+  .ptbl tr.div td{background:#efefef!important;color:#bbb;font-size:7px;padding:1px}
+  .pnotes-row{display:flex;margin-bottom:5px;border:1px solid #ddd;border-radius:3px;overflow:hidden;font-size:9px}
+  .pnotes-run{background:#cc1111!important;color:#fff!important;font-weight:700;min-width:50px;display:flex;align-items:center;justify-content:center;padding:5px}
+  .pnotes-body{padding:5px 8px;flex:1}
+}
+
+/* MOBILE FALLBACK */
+@media(max-width:639px){
+  body{overflow:auto!important}
+  #dash{overflow-y:auto;height:auto;flex:none}
+  .widget{position:static!important;width:100%!important;height:auto!important;margin-bottom:8px;display:block}
+  .wb{height:auto!important;overflow:visible}
+  .wr{display:none!important}
+  .wh,.edit-on .wh{cursor:default!important}
+  .t2x2{grid-template-columns:1fr 1fr}
+}
+</style>
+</head>
+<body>
+<div id="shell">
+
+<!-- TOPBAR -->
+<div id="topbar">
+  <div id="logo-area" onclick="uploadLogo()" title="Click to upload logo">
+    <img id="logo-img"><span id="logo-text">LM HUD</span>
+    <span id="logo-hint">tap to upload</span>
+  </div>
+  <input type="file" id="logo-inp" accept="image/*" style="display:none" onchange="setLogo(event)">
+  <div class="vsep"></div>
+  <button id="sess-btn" onclick="openM('m-sess')">SESSION</button>
+  <button class="tb" onclick="quickNewSession()" title="New Session" style="padding:2px 5px;font-size:13px;font-weight:900;min-height:24px">+</button>
+  <button class="tb" onclick="openM('m-sess-edit')" title="Edit Session Info" style="padding:2px 5px;font-size:12px;min-height:24px">&#9881;</button>
+  <div class="gap"></div>
+  <span class="ebadge" id="ebadge">EDITING</span>
+  <button class="tb" id="ebtn" onclick="toggleEdit()">Edit Layout</button>
+  <button class="tb" onclick="openPicker()">+ Widget</button>
+  <button class="tb" onclick="resetLayout()">Reset</button>
+  <button class="tb" onclick="showLog()">Log</button>
+  <button class="tb" onclick="printPDF()">PDF</button>
+  <button class="tb" onclick="exportJSON()">Export</button>
+  <button class="tb" onclick="importClick()">Import</button>
+  <button class="tb red" onclick="saveAll()">Save</button>
+  <input type="file" id="imp" accept=".json" style="display:none" onchange="doImport(event)">
+</div>
+
+<!-- RUN STRIP -->
+<div id="strip">
+  <div id="rcards"></div>
+  <div class="radd" onclick="addRun()" title="New Run">+</div>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dash"><div id="ghost"></div></div>
+
+</div>
+
+<!-- MODALS -->
+
+<!-- Session Manager -->
+<div class="modal" id="m-sess">
+  <div class="mbox wide">
+    <div class="mt">Session Manager</div>
+    <div id="sess-list"></div>
+    <div class="mhr"></div>
+    <div class="msub">New Session</div>
+    <input class="mi" id="ns-name" type="text" placeholder="Session name (e.g. Bristol Saturday Practice)">
+    <div class="g2 mb">
+      <input class="mi" id="ns-date" type="date" style="margin-bottom:0">
+      <input class="mi" id="ns-track" type="text" placeholder="Track" style="margin-bottom:0">
+    </div>
+    <div class="g2 mb">
+      <input class="mi" id="ns-driver" type="text" placeholder="Driver" style="margin-bottom:0">
+      <input class="mi" id="ns-chassis" type="text" placeholder="Chassis #" style="margin-bottom:0">
+    </div>
+    <div class="g2 mb">
+      <input class="mi" id="ns-air" type="number" placeholder="Air Temp F" style="margin-bottom:0">
+      <input class="mi" id="ns-trk" type="number" placeholder="Track Temp F" style="margin-bottom:0">
+    </div>
+    <div class="g2">
+      <input class="mi" id="ns-pnum" type="number" placeholder="Practice #" style="margin-bottom:0">
+      <input class="mi" id="ns-plen" type="text" placeholder="Practice Length" style="margin-bottom:0">
+    </div>
+    <div class="mbtns">
+      <button class="tb red" onclick="createSession()">Create Session</button>
+      <button class="tb" style="margin-left:auto" onclick="closeM('m-sess')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Session -->
+<div class="modal" id="m-sess-edit">
+  <div class="mbox">
+    <div class="mt" id="es-title">Edit Session</div>
+    <input class="mi" id="es-name" type="text" placeholder="Session name">
+    <div class="g2 mb">
+      <input class="mi" id="es-date" type="date" style="margin-bottom:0">
+      <input class="mi" id="es-track" type="text" placeholder="Track" style="margin-bottom:0">
+    </div>
+    <div class="g2 mb">
+      <input class="mi" id="es-driver" type="text" placeholder="Driver" style="margin-bottom:0">
+      <input class="mi" id="es-chassis" type="text" placeholder="Chassis #" style="margin-bottom:0">
+    </div>
+    <div class="g2 mb">
+      <input class="mi" id="es-air" type="number" placeholder="Air Temp F" style="margin-bottom:0">
+      <input class="mi" id="es-trk" type="number" placeholder="Track Temp F" style="margin-bottom:0">
+    </div>
+    <div class="g2">
+      <input class="mi" id="es-pnum" type="number" placeholder="Practice #" style="margin-bottom:0">
+      <input class="mi" id="es-plen" type="text" placeholder="Practice Length" style="margin-bottom:0">
+    </div>
+    <div class="mbtns">
+      <button class="tb red" onclick="saveSessionEdit()">Save Changes</button>
+      <button class="tb" style="margin-left:auto" onclick="closeM('m-sess-edit')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lap Times -->
+<div class="modal" id="m-laps">
+  <div class="mbox">
+    <div class="mt" id="laps-title">Lap Times</div>
+    <div id="laps-list"></div>
+    <div class="lap-add-row">
+      <input class="lap-inp" id="lap-inp" type="text" placeholder="e.g. 14.232 or 1:14.232"
+        onkeydown="if(event.key==='Enter')addLap()">
+      <button class="tb red" onclick="addLap()" style="flex-shrink:0;min-height:var(--ih);padding:0 12px;font-size:14px">+</button>
+    </div>
+    <div class="mbtns">
+      <button class="tb" onclick="closeM('m-laps')">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Widget Picker -->
+<div class="modal" id="m-pick">
+  <div class="mbox">
+    <div class="mt">Widgets</div>
+    <div id="pick-std"></div>
+    <div class="mhr"></div>
+    <div class="msub">Add Tire Pressure Box</div>
+    <input class="mi" id="tb-lbl" type="text" placeholder="Label (e.g. LF Cold, RF Hot)">
+    <select class="mi" id="tb-fld">
+      <option value="clf">LF Cold PSI</option><option value="crf">RF Cold PSI</option>
+      <option value="clr">LR Cold PSI</option><option value="crr">RR Cold PSI</option>
+      <option value="hlf">LF Hot PSI</option><option value="hrf">RF Hot PSI</option>
+      <option value="hlr">LR Hot PSI</option><option value="hrr">RR Hot PSI</option>
+    </select>
+    <button class="tb red" style="width:100%;margin-bottom:6px;min-height:32px" onclick="addTireBox()">Add Box</button>
+    <div id="pick-boxes"></div>
+    <div class="mbtns"><button class="tb" onclick="closeM('m-pick')">Close</button></div>
+  </div>
+</div>
+
+<!-- Log -->
+<div class="modal" id="m-log">
+  <div class="mbox">
+    <div class="mt">Run Log</div>
+    <div id="log-list"></div>
+    <div class="mbtns">
+      <button class="tb red" onclick="clearRuns()">Clear Runs</button>
+      <button class="tb" style="margin-left:auto" onclick="closeM('m-log')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Widget Settings -->
+<div class="modal" id="m-settings">
+  <div class="mbox">
+    <div class="mt" id="settings-title">Widget Settings</div>
+    <div id="settings-body"></div>
+    <div class="mbtns">
+      <button class="tb" onclick="closeM('m-settings')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Print View -->
+<div id="pview"></div>
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  CONSTANTS & CONFIG
+// ═══════════════════════════════════════════════════
+const SNAP=10, KEY='lmhud7';
+
+const FRACS=['','1/16','1/8','3/16','1/4','5/16','3/8','7/16','1/2','9/16','5/8','11/16','3/4','13/16','7/8','15/16'];
+
+function toFrac(v){
+  if(v==null||v==='')return'';
+  const w=Math.floor(v), f=Math.round((v-w)*16);
+  if(f===0)return String(w);
+  if(w===0)return FRACS[f]||'0';
+  return w+' '+FRACS[f];
+}
+function toFracNoWhole(v){
+  const f=Math.round(v*16);return FRACS[f]||'0';
+}
+
+// Parse time string to seconds
+function parseTime(s){
+  if(!s)return Infinity;
+  s=s.trim();const p=s.split(':');
+  return p.length===2?parseFloat(p[0])*60+parseFloat(p[1]):parseFloat(p[0]);
+}
+function formatTime(sec){
+  if(!isFinite(sec))return'';
+  if(sec>=60){const m=Math.floor(sec/60),s=(sec%60).toFixed(3).padStart(6,'0');return m+':'+s;}
+  return sec.toFixed(3);
+}
+
+// Widget definitions
+const STD=[
+  {id:'run_info',  title:'Run Info',         fn:wRunInfo   },
+  {id:'stagger',   title:'Stagger',          fn:wStagger   },
+  {id:'cold_psi',  title:'Cold Tire PSI',    fn:wColdPSI   },
+  {id:'hot_psi',   title:'Hot Tire PSI',     fn:wHotPSI    },
+  {id:'builds',    title:'Builds (Calc)',    fn:wBuilds    },
+  {id:'chassis',   title:'Chassis Setup',    fn:wChassis   },
+  {id:'temps',     title:'Temps',            fn:wTemps     },
+  {id:'tire_temps',title:'Tire Temps',       fn:wTireTemps },
+  {id:'brk_temps', title:'Brake Temps',      fn:wBrkTemps  },
+  {id:'notes',     title:'Notes',            fn:wNotes     },
+];
+
+const DEF={
+  run_info:  {x:0,  y:0,  w:200,h:180,v:true,type:'run_info'  },
+  stagger:   {x:210,y:0,  w:300,h:180,v:true,type:'stagger'   },
+  cold_psi:  {x:520,y:0,  w:270,h:170,v:true,type:'cold_psi'  },
+  hot_psi:   {x:520,y:180,w:270,h:170,v:true,type:'hot_psi'   },
+  builds:    {x:520,y:360,w:270,h:110,v:true,type:'builds'    },
+  chassis:   {x:0,  y:190,w:510,h:220,v:true,type:'chassis'   },
+  temps:     {x:0,  y:420,w:210,h:160,v:true,type:'temps'     },
+  tire_temps:{x:220,y:420,w:400,h:230,v:true,type:'tire_temps'},
+  brk_temps: {x:630,y:420,w:170,h:170,v:true,type:'brk_temps' },
+  notes:     {x:0,  y:590,w:620,h:190,v:true,type:'notes'     },
+};
+
+// ═══════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════
+let layout=dc(DEF), sessions=[], curSess=0, curRun=0, editing=false, tbxN=0;
+let canvasCtx=null, canvasDrawing=false;
+
+// ═══════════════════════════════════════════════════
+//  DATA MODELS
+// ═══════════════════════════════════════════════════
+function blankRun(n){
+  return{n,lapTimes:[],lapCount:0,tset:'',
+    circ_lf:84,circ_rf:84,circ_lr:84,circ_rr:84,
+    clf:12,crf:12,clr:12,crr:12,
+    hlf:'',hrf:'',hlr:'',hrr:'',
+    bar_load:200,bbias_f:'',bbias_r:'',
+    xmem_l:0,xmem_r:0,tape:'',fuel:'',
+    temps:[{name:'Water',val:100},{name:'Oil',val:100}],
+    tlf:['','',''],trf:['','',''],tlr:['','',''],trr:['','',''],
+    bklf:'',bkrf:'',bklr:'',bkrr:'',
+    notes_text:'',notes_canvas:'',notes_label:'Comments'};
+}
+function blankSession(n){
+  return{id:'s'+Date.now(),name:'Session '+n,
+    date:new Date().toISOString().slice(0,10),
+    track:'',driver:'',chassis:'',air:'',trk:'',pnum:n,plen:'',
+    runs:[blankRun(1)]};
+}
+function curSessObj(){return sessions[curSess]||sessions[0]}
+function getRun(){return curSessObj().runs[curRun]||curSessObj().runs[0]}
+
+// ═══════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════
+function init(){
+  const raw=localStorage.getItem(KEY);
+  if(raw){try{
+    const d=JSON.parse(raw);
+    if(d.layout) layout=Object.assign(dc(DEF),d.layout);
+    if(d.sessions?.length) sessions=d.sessions;
+    if(d.curSess!=null) curSess=d.curSess;
+    if(d.curRun!=null) curRun=d.curRun;
+    if(d.tbxN) tbxN=d.tbxN;
+  }catch(e){}}
+  if(!sessions.length){sessions=[blankSession(1)];curSess=0;curRun=0;}
+  // Clamp indices
+  curSess=Math.min(curSess,sessions.length-1);
+  curRun=Math.min(curRun,(curSessObj().runs.length||1)-1);
+  // Apply logo
+  const logo=localStorage.getItem('lm_logo');
+  if(logo) applyLogoData(logo);
+  // Set default date on new session
+  const sess=curSessObj();
+  if(!sess.date) sess.date=new Date().toISOString().slice(0,10);
+  updateSessBtn();
+  renderStrip();
+  renderAll();
+}
+function dc(o){return JSON.parse(JSON.stringify(o))}
+
+// ═══════════════════════════════════════════════════
+//  SESSION MANAGEMENT
+// ═══════════════════════════════════════════════════
+function updateSessBtn(){
+  const s=curSessObj();
+  document.getElementById('sess-btn').textContent=(s.name||'Session')+(s.track?' – '+s.track:'');
+}
+
+function openSessModal(){
+  const list=document.getElementById('sess-list');
+  list.innerHTML=sessions.map((s,i)=>`
+    <div class="sess-card${i===curSess?' current':''}" onclick="loadSession(${i})">
+      <div class="sess-name">${s.name||'Untitled'}</div>
+      <div class="sess-meta">${s.track||'No track'} · ${s.date||''} · ${s.runs.length} run${s.runs.length!==1?'s':''}</div>
+      <button class="sess-del" onclick="event.stopPropagation();delSession(${i})">x</button>
+    </div>`).join('');
+  // Pre-fill new session fields
+  const next=sessions.length+1;
+  document.getElementById('ns-name').value='Session '+next;
+  document.getElementById('ns-date').value=new Date().toISOString().slice(0,10);
+  ['ns-track','ns-driver','ns-chassis','ns-air','ns-trk','ns-plen'].forEach(id=>{
+    const prev=curSessObj();
+    if(id==='ns-track') document.getElementById(id).value=prev.track||'';
+    else if(id==='ns-driver') document.getElementById(id).value=prev.driver||'';
+    else if(id==='ns-chassis') document.getElementById(id).value=prev.chassis||'';
+  });
+  document.getElementById('ns-pnum').value=next;
+  openM('m-sess');
+}
+
+function loadSession(i){
+  saveCurrentRun();
+  curSess=i;curRun=0;
+  updateSessBtn();renderStrip();renderAll();autosave();
+  closeM('m-sess');toast('Loaded: '+sessions[i].name);
+}
+
+function delSession(i){
+  if(sessions.length<=1){toast('Cannot delete last session');return;}
+  if(!confirm('Delete session "'+sessions[i].name+'"?'))return;
+  sessions.splice(i,1);
+  if(curSess>=sessions.length) curSess=sessions.length-1;
+  curRun=0;
+  updateSessBtn();renderStrip();renderAll();autosave();openSessModal();
+}
+
+function quickNewSession(){
+  saveCurrentRun();
+  const n=sessions.length+1;
+  const s=blankSession(n);
+  // Carry over track/driver/chassis from current session for convenience
+  const prev=curSessObj();
+  s.track=prev.track||''; s.driver=prev.driver||''; s.chassis=prev.chassis||'';
+  s.name='Session '+n;
+  sessions.push(s);
+  curSess=sessions.length-1; curRun=0;
+  updateSessBtn(); renderStrip(); renderAll(); autosave();
+  toast('Session '+n+' created');
+  // Open edit modal so user can fill in details
+  openM('m-sess-edit');
+}
+
+function openEditSession(){
+  const s=curSessObj();
+  document.getElementById('es-title').textContent='Edit: '+s.name;
+  document.getElementById('es-name').value=s.name||'';
+  document.getElementById('es-date').value=s.date||'';
+  document.getElementById('es-track').value=s.track||'';
+  document.getElementById('es-driver').value=s.driver||'';
+  document.getElementById('es-chassis').value=s.chassis||'';
+  document.getElementById('es-air').value=s.air||'';
+  document.getElementById('es-trk').value=s.trk||'';
+  document.getElementById('es-pnum').value=s.pnum||'';
+  document.getElementById('es-plen').value=s.plen||'';
+  document.getElementById('m-sess-edit').classList.add('open');
+}
+
+function saveSessionEdit(){
+  const s=curSessObj();
+  s.name=document.getElementById('es-name').value.trim()||s.name;
+  s.date=document.getElementById('es-date').value;
+  s.track=document.getElementById('es-track').value;
+  s.driver=document.getElementById('es-driver').value;
+  s.chassis=document.getElementById('es-chassis').value;
+  s.air=parseFloat(document.getElementById('es-air').value)||'';
+  s.trk=parseFloat(document.getElementById('es-trk').value)||'';
+  s.pnum=parseInt(document.getElementById('es-pnum').value)||s.pnum;
+  s.plen=document.getElementById('es-plen').value;
+  updateSessBtn();autosave();
+  closeM('m-sess-edit');toast('Session updated');
+}
+
+function createSession(){
+  const name=document.getElementById('ns-name').value.trim()||'Session '+(sessions.length+1);
+  const s=blankSession(sessions.length+1);
+  s.name=name;
+  s.date=document.getElementById('ns-date').value;
+  s.track=document.getElementById('ns-track').value;
+  s.driver=document.getElementById('ns-driver').value;
+  s.chassis=document.getElementById('ns-chassis').value;
+  s.air=parseFloat(document.getElementById('ns-air').value)||'';
+  s.trk=parseFloat(document.getElementById('ns-trk').value)||'';
+  s.pnum=parseInt(document.getElementById('ns-pnum').value)||sessions.length+1;
+  s.plen=document.getElementById('ns-plen').value;
+  sessions.push(s);
+  loadSession(sessions.length-1);
+}
+
+// ═══════════════════════════════════════════════════
+//  RUN DATA COLLECT
+// ═══════════════════════════════════════════════════
+function saveCurrentRun(){
+  const r=getRun();if(!r)return;
+  r.tset=gv('r_ts');
+  // Lap times collected live, skip here
+  // Circumferences (fraction steppers)
+  ['lf','rf','lr','rr'].forEach(c=>{
+    const el=document.getElementById('r_circ_'+c);
+    if(el) r['circ_'+c]=parseFloat(el.value)||84;
+  });
+  // Cold PSI
+  ['clf','crf','clr','crr'].forEach(k=>{const el=document.getElementById('r_'+k);if(el)r[k]=parseFloat(el.value)||'';});
+  // Hot PSI
+  ['hlf','hrf','hlr','hrr'].forEach(k=>{const el=document.getElementById('r_'+k);if(el)r[k]=parseFloat(el.value)||'';});
+  // Chassis
+  r.bar_load=nv('r_barload');r.bbias_f=nv('r_bbiasf');r.bbias_r=nv('r_bbiasr');
+  r.tape=nv('r_tape');r.fuel=nv('r_fuel');
+  const lcEl=document.getElementById('r_lapcount');if(lcEl)r.lapCount=parseInt(lcEl.value)||0;
+  // Cross member (fraction steppers)
+  const xmL=document.getElementById('r_xmem_l');const xmR=document.getElementById('r_xmem_r');
+  if(xmL)r.xmem_l=parseFloat(xmL.value)||0;
+  if(xmR)r.xmem_r=parseFloat(xmR.value)||0;
+  // Temps (collect each)
+  r.temps.forEach((t,i)=>{const el=document.getElementById('r_temp_'+i);if(el)t.val=parseFloat(el.value)||t.val;});
+  // Tire temps
+  ['lf','rf','lr','rr'].forEach(c=>{
+    r['t'+c]=[nv('r_tt'+c+'0'),nv('r_tt'+c+'1'),nv('r_tt'+c+'2')];
+  });
+  // Brake temps
+  ['lf','rf','lr','rr'].forEach(c=>{r['bk'+c]=nv('r_bk'+c);});
+  // Notes text
+  const nt=document.getElementById('notes-txt');if(nt)r.notes_text=nt.value;
+  // Notes label (stored live)
+  // Canvas saved live on stroke end
+  // Tire boxes
+  Object.keys(layout).filter(k=>layout[k].type==='tire_box').forEach(k=>{
+    const el=document.getElementById('tb_v_'+k);
+    if(el)getRun()['_'+k]=parseFloat(el.value)||'';
+  });
+}
+
+function gv(id){const e=document.getElementById(id);return e?e.value:'';}
+function nv(id){const e=document.getElementById(id);return e?(parseFloat(e.value)||''):'';}
+function sv(id,v){const e=document.getElementById(id);if(e&&v!=null&&v!=='')e.value=v;}
+
+// ═══════════════════════════════════════════════════
+//  AUTOSAVE
+// ═══════════════════════════════════════════════════
+function autosave(){
+  try{
+    saveCurrentRun();
+    localStorage.setItem(KEY,JSON.stringify({layout,sessions,curSess,curRun,tbxN}));
+  }catch(e){}
+}
+function saveAll(){autosave();toast('Saved');}
+function hookInputs(){
+  document.querySelectorAll('#dash input,#dash textarea').forEach(el=>{
+    el.removeEventListener('blur',autosave);el.addEventListener('blur',autosave);
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  RUN STRIP
+// ═══════════════════════════════════════════════════
+function renderStrip(){
+  const runs=curSessObj().runs;
+  document.getElementById('rcards').innerHTML=runs.map((r,i)=>{
+    const fastest=calcFastest(r.lapTimes);
+    const lc=r.lapCount||r.lapTimes.length||0;
+    return`<div class="rcard${i===curRun?' active':''}" onclick="switchRun(${i})">
+      <div class="rn">Run ${r.n}</div>
+      <div class="rt">${fastest||'--:--'}</div>
+      <div class="rl">${lc?lc+' lap'+(lc!==1?'s':''):'No laps'}</div>
+    </div>`;
+  }).join('');
+  setTimeout(()=>{document.querySelector('.rcard.active')?.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'});},50);
+}
+
+function calcFastest(times){
+  if(!times||!times.length)return'';
+  const best=Math.min(...times.map(parseTime));
+  return isFinite(best)?formatTime(best):'';
+}
+
+function switchRun(i){saveCurrentRun();curRun=i;renderStrip();refreshRunWidgets();autosave();}
+function addRun(){
+  saveCurrentRun();
+  const runs=curSessObj().runs;
+  const n=Math.max(...runs.map(r=>r.n))+1;
+  runs.push(blankRun(n));curRun=runs.length-1;
+  renderStrip();refreshRunWidgets();autosave();toast('Run '+n+' added');
+}
+
+// ═══════════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════════
+function renderAll(){
+  document.querySelectorAll('#dash .widget').forEach(w=>w.remove());
+  Object.keys(layout).forEach(id=>{
+    const pos=layout[id];if(!pos.v)return;
+    const def=getDef(id,pos.type);if(def)buildWidget(id,def,pos);
+  });
+  hookInputs();
+  setTimeout(()=>{initNotesCanvas();updateBuilds();updateStagger();},60);
+}
+
+function refreshRunWidgets(){
+  const runWids=STD.map(d=>d.id);
+  runWids.forEach(id=>{
+    const wb=document.querySelector(`[data-wid="${id}"] .wb`);
+    if(wb){const d=getDef(id,'std');if(d)wb.innerHTML=d.fn(getRun());}
+  });
+  Object.keys(layout).filter(k=>layout[k].type==='tire_box').forEach(k=>{
+    const wb=document.querySelector(`[data-wid="${k}"] .wb`);
+    if(wb)wb.innerHTML=tboxHTML(k,getRun());
+  });
+  hookInputs();
+  setTimeout(()=>{initNotesCanvas();updateBuilds();updateStagger();},60);
+}
+
+function getDef(id,type){
+  if(type==='tire_box'){const lp=layout[id];return{id,title:lp?.label||'PSI Box',fn:r=>tboxHTML(id,r)};}
+  return STD.find(d=>d.id===id);
+}
+
+function buildWidget(id,def,pos){
+  const dash=document.getElementById('dash');
+  const w=document.createElement('div');
+  w.className='widget'+(editing?' ':'');
+  w.dataset.wid=id;
+  w.style.cssText=`left:${pos.x}px;top:${pos.y}px;width:${pos.w}px;height:${pos.h}px;z-index:10`;
+  w.innerHTML=`
+    <div class="wh" data-wid="${id}">
+      <span class="wt">${def.title}</span>
+      <button class="wbtn" onclick="openSettings('${id}')" title="Settings">&#9881;</button>
+      <button class="wbtn wcls" onclick="closeW('${id}')" title="Hide">&#10005;</button>
+    </div>
+    <div class="wb">${def.fn(getRun())}</div>
+    <div class="wr" data-wid="${id}"></div>`;
+  dash.appendChild(w);
+  bindDrag(w);bindResize(w.querySelector('.wr'));
+}
+
+// ═══════════════════════════════════════════════════
+//  EDIT MODE
+// ═══════════════════════════════════════════════════
+function toggleEdit(){
+  editing=!editing;
+  const btn=document.getElementById('ebtn'),badge=document.getElementById('ebadge');
+  const dash=document.getElementById('dash');
+  btn.textContent=editing?'Done':'Edit Layout';
+  btn.className=editing?'tb red':'tb';
+  badge.style.display=editing?'inline':'none';
+  dash.classList.toggle('edit-on',editing);
+  document.querySelectorAll('.widget').forEach(w=>w.classList.toggle('editing',editing));
+  if(!editing){autosave();toast('Layout saved');}
+}
+
+function closeW(id){layout[id].v=false;document.querySelector(`[data-wid="${id}"]`)?.remove();autosave();toast('Hidden');}
+function showW(id){
+  layout[id].v=true;const def=getDef(id,layout[id].type);
+  if(def)buildWidget(id,def,layout[id]);
+  hookInputs();setTimeout(()=>{initNotesCanvas();updateBuilds();updateStagger();},60);
+  autosave();closeM('m-pick');toast(def.title+' restored');
+}
+
+// ═══════════════════════════════════════════════════
+//  DRAG & RESIZE
+// ═══════════════════════════════════════════════════
+function bindDrag(widget){
+  const hdr=widget.querySelector('.wh');
+  let sx,sy,ox,oy,drag=false;
+  const ghost=document.getElementById('ghost');
+  function start(cx,cy){
+    if(!editing)return;drag=true;sx=cx;sy=cy;
+    ox=parseInt(widget.style.left)||0;oy=parseInt(widget.style.top)||0;
+    widget.classList.add('dragging');widget.style.zIndex=500;
+    ghost.style.cssText=`display:block;left:${ox}px;top:${oy}px;width:${widget.offsetWidth}px;height:${widget.offsetHeight}px`;
+  }
+  function move(cx,cy){
+    if(!drag)return;
+    const nx=Math.max(0,sn(ox+(cx-sx))),ny=Math.max(0,sn(oy+(cy-sy)));
+    widget.style.left=nx+'px';widget.style.top=ny+'px';
+    ghost.style.left=nx+'px';ghost.style.top=ny+'px';
+  }
+  function end(){
+    if(!drag)return;drag=false;
+    widget.classList.remove('dragging');widget.style.zIndex=10;
+    ghost.style.display='none';
+    const id=widget.dataset.wid;
+    if(layout[id]){layout[id].x=parseInt(widget.style.left)||0;layout[id].y=parseInt(widget.style.top)||0;}
+  }
+  hdr.addEventListener('mousedown',e=>{if(e.target.classList.contains('wbtn'))return;start(e.clientX,e.clientY);e.preventDefault();});
+  document.addEventListener('mousemove',e=>move(e.clientX,e.clientY));
+  document.addEventListener('mouseup',end);
+  hdr.addEventListener('touchstart',e=>{if(e.target.classList.contains('wbtn'))return;if(!editing)return;const t=e.touches[0];start(t.clientX,t.clientY);},{passive:true});
+  hdr.addEventListener('touchmove',e=>{if(!drag)return;e.preventDefault();const t=e.touches[0];move(t.clientX,t.clientY);},{passive:false});
+  hdr.addEventListener('touchend',end);
+}
+
+function bindResize(handle){
+  if(!handle)return;
+  const widget=handle.closest('.widget');
+  let sx,sy,ow,oh,resz=false;
+  function start(cx,cy){if(!editing)return;resz=true;sx=cx;sy=cy;ow=widget.offsetWidth;oh=widget.offsetHeight;}
+  function move(cx,cy){if(!resz)return;widget.style.width=Math.max(140,sn(ow+(cx-sx)))+'px';widget.style.height=Math.max(80,sn(oh+(cy-sy)))+'px';}
+  function end(){if(!resz)return;resz=false;const id=widget.dataset.wid;if(layout[id]){layout[id].w=widget.offsetWidth;layout[id].h=widget.offsetHeight;}}
+  handle.addEventListener('mousedown',e=>{start(e.clientX,e.clientY);e.preventDefault();e.stopPropagation();});
+  document.addEventListener('mousemove',e=>move(e.clientX,e.clientY));
+  document.addEventListener('mouseup',end);
+  handle.addEventListener('touchstart',e=>{if(!editing)return;const t=e.touches[0];start(t.clientX,t.clientY);e.stopPropagation();},{passive:true});
+  handle.addEventListener('touchmove',e=>{if(!resz)return;e.preventDefault();const t=e.touches[0];move(t.clientX,t.clientY);},{passive:false});
+  handle.addEventListener('touchend',end);
+}
+function sn(v){return Math.round(v/SNAP)*SNAP;}
+function resetLayout(){
+  if(!confirm('Reset to default layout? Data kept.'))return;
+  const boxes={};Object.keys(layout).filter(k=>layout[k].type==='tire_box').forEach(k=>boxes[k]=layout[k]);
+  layout=Object.assign(dc(DEF),boxes);renderAll();autosave();toast('Layout reset');
+}
+
+// ═══════════════════════════════════════════════════
+//  STEPPER (regular numeric)
+// ═══════════════════════════════════════════════════
+let stmr=null;
+function startStep(id,d,mn,mx){stopStep();doStep(id,d,mn,mx);stmr=setInterval(()=>doStep(id,d,mn,mx),110);}
+function stopStep(){if(stmr){clearInterval(stmr);stmr=null;}autosave();updateBuilds();}
+function doStep(id,d,mn,mx){
+  const el=document.getElementById(id);if(!el)return;
+  let v=parseFloat(el.value)||0;
+  v=Math.round((v+d)*10000)/10000;
+  if(mn!=null)v=Math.max(mn,v);
+  if(mx!=null)v=Math.min(mx,v);
+  el.value=v;
+}
+
+// Fraction stepper
+let fstmr=null;
+function startFStep(id,d,mn,mx){stopFStep();doFStep(id,d,mn,mx);fstmr=setInterval(()=>doFStep(id,d,mn,mx),120);}
+function stopFStep(){if(fstmr){clearInterval(fstmr);fstmr=null;}autosave();updateStagger();updateBuilds();}
+function doFStep(id,d,mn,mx){
+  const el=document.getElementById(id);if(!el)return;
+  const step=d; // d is +/- 0.0625 (1/16)
+  let v=parseFloat(el.value)||(mn||0);
+  v=Math.round((v+step)*160)/160; // keep in 1/16 steps
+  if(mn!=null)v=Math.max(mn,v);
+  if(mx!=null)v=Math.min(mx,v);
+  el.value=v;
+  const disp=document.getElementById('fd_'+id);
+  if(disp) disp.textContent=mn>=1?toFrac(v):toFracNoWhole(v);
+}
+
+// ═══════════════════════════════════════════════════
+//  FRACTION STEPPER HTML
+// ═══════════════════════════════════════════════════
+// mn/mx: numeric range, isWhole: show whole number in fraction
+function fracSp(id,val,mn,mx,showWhole=true){
+  const d=0.0625;
+  const disp=showWhole?toFrac(val||mn):toFracNoWhole(val||0);
+  return`<div class="fsp">
+    <button class="spb" onpointerdown="startFStep('${id}',-${d},${mn},${mx})" onpointerup="stopFStep()" onpointercancel="stopFStep()">-</button>
+    <div class="fsp-disp" id="fd_${id}">${disp}</div>
+    <input type="hidden" id="${id}" value="${val||mn}">
+    <button class="spb" onpointerdown="startFStep('${id}',${d},${mn},${mx})" onpointerup="stopFStep()" onpointercancel="stopFStep()">+</button>
+  </div>`;
+}
+
+// ═══════════════════════════════════════════════════
+//  WIDGET HTML HELPERS
+// ═══════════════════════════════════════════════════
+function sp(id,val,step,mn,mx,ph=''){
+  const mnA=mn!=null?`,${mn}`:',null';const mxA=mx!=null?`,${mx}`:',null';
+  return`<div class="sp">
+    <button class="spb" onpointerdown="startStep('${id}',-${step}${mnA}${mxA})" onpointerup="stopStep()" onpointercancel="stopStep()">-</button>
+    <input type="number" id="${id}" value="${val??''}" step="${step}" placeholder="${ph}">
+    <button class="spb" onpointerdown="startStep('${id}',${step}${mnA}${mxA})" onpointerup="stopStep()" onpointercancel="stopStep()">+</button>
+  </div>`;
+}
+function fld(l,h){return`<div class="field"><label>${l}</label>${h}</div>`;}
+function txt(l,id,v,ph=''){return fld(l,`<input type="text" id="${id}" value="${v??''}" placeholder="${ph}">`);}
+function spf(l,id,v,s,mn,mx,ph=''){return fld(l,sp(id,v,s,mn,mx,ph));}
+
+// ═══════════════════════════════════════════════════
+//  BUILDS CALCULATION
+// ═══════════════════════════════════════════════════
+function updateBuilds(){
+  ['lf','rf','lr','rr'].forEach(c=>{
+    const cold=parseFloat(document.getElementById('r_c'+c)?.value)||parseFloat(getRun()['c'+c])||0;
+    const hot =parseFloat(document.getElementById('r_h'+c)?.value)||parseFloat(getRun()['h'+c])||0;
+    const build=hot-cold;
+    const el=document.getElementById('bld_'+c);
+    if(el){
+      el.textContent=(build>=0?'+':'')+build.toFixed(1);
+      el.className='build-val '+(build>0?'pos':build<0?'neg':'zero');
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  STAGGER CALCULATION
+// ═══════════════════════════════════════════════════
+function updateStagger(){
+  const r=getRun();
+  const lf=parseFloat(document.getElementById('r_circ_lf')?.value)||r.circ_lf||84;
+  const rf=parseFloat(document.getElementById('r_circ_rf')?.value)||r.circ_rf||84;
+  const lr=parseFloat(document.getElementById('r_circ_lr')?.value)||r.circ_lr||84;
+  const rr=parseFloat(document.getElementById('r_circ_rr')?.value)||r.circ_rr||84;
+  const fs=Math.round((rf-lf)*160)/160;
+  const rs=Math.round((rr-lr)*160)/160;
+  const fsEl=document.getElementById('stag_f');const rsEl=document.getElementById('stag_r');
+  if(fsEl)fsEl.textContent=toFrac(Math.abs(fs))+(fs<0?' (-)':'');
+  if(rsEl)rsEl.textContent=toFrac(Math.abs(rs))+(rs<0?' (-)':'');
+}
+
+// ═══════════════════════════════════════════════════
+//  WIDGET RENDER FUNCTIONS
+// ═══════════════════════════════════════════════════
+function wRunInfo(r){
+  const fastest=calcFastest(r.lapTimes);
+  const times=r.lapTimes||[];
+  const timesHtml=times.length
+    ?times.map((t,i)=>`
+      <div style="display:flex;align-items:center;gap:3px;padding:2px 0;border-bottom:1px solid var(--bd)">
+        <span style="font-size:8px;color:var(--dim);min-width:14px;font-weight:700">${i+1}</span>
+        <span style="font-size:12px;font-weight:700;flex:1;font-family:monospace;${t===fastest?'color:var(--accH)':''}">${t}</span>
+        ${t===fastest?'<span style="font-size:7px;color:var(--acc);font-weight:800;letter-spacing:.5px">BEST</span>':''}
+        <button onclick="deleteLapInline(${i})" style="background:none;border:none;color:var(--dim);font-size:10px;cursor:pointer;padding:0 2px;touch-action:manipulation;line-height:1">x</button>
+      </div>`).join('')
+    :'<div style="color:var(--dim);font-size:9px;padding:3px 0">No times entered</div>';
+  return`
+    <div style="font-size:15px;font-weight:900;color:var(--acc);margin-bottom:4px;letter-spacing:1px">RUN ${r.n}</div>
+    <div style="background:var(--p2);border:1px solid var(--bd);border-radius:4px;padding:5px">
+      <div class="g2 mb">
+        <div>
+          <div style="font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Lap Count</div>
+          ${sp('r_lapcount',r.lapCount||0,1,0,null,'0')}
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--inp);border:1px solid var(--bd);border-radius:4px;padding:3px 2px">
+          <div style="font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Fastest</div>
+          <div style="font-size:13px;font-weight:900;color:var(--accH);font-family:monospace;margin-top:1px">${fastest||'--'}</div>
+        </div>
+      </div>
+      <div style="max-height:90px;overflow-y:auto;margin-bottom:4px;scrollbar-width:thin;scrollbar-color:var(--bd) transparent">${timesHtml}</div>
+      <div style="display:flex;gap:3px">
+        <input id="ri-lap-inp" type="text" placeholder="e.g. 14.232"
+          style="flex:1;background:var(--inp);border:1px solid var(--bd);color:var(--txt);border-radius:4px;padding:2px 5px;font-size:12px;outline:none;min-height:26px;font-family:monospace"
+          onkeydown="if(event.key==='Enter')addLapInline()"
+          onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bd)'">
+        <button class="tb red" onclick="addLapInline()" style="min-height:26px;padding:0 8px;font-size:14px;font-weight:900">+</button>
+      </div>
+    </div>
+    <div style="margin-top:5px">${txt('Tire Set','r_ts',r.tset,'#')}</div>`;
+}
+
+function wStagger(r){
+  const corners=[['LF','lf'],['RF','rf'],['LR','lr'],['RR','rr']];
+  const tireHtml=corners.map(([l,c])=>`
+    <div class="tc">
+      <div class="cl">${l}</div>
+      ${fracSp('r_circ_'+c,r['circ_'+c],83,88,true)}
+    </div>`).join('');
+  return`
+    <div class="sec">Tire Circumference (in)</div>
+    <div class="t2x2 mb">${tireHtml}</div>
+    <div class="stag-calc">
+      <div class="sec">Calculated Stagger</div>
+      <div class="stag-row">
+        <div class="stag-item"><div class="sl">Front</div><div class="sv" id="stag_f">--</div></div>
+        <div class="stag-item"><div class="sl">Rear</div><div class="sv" id="stag_r">--</div></div>
+      </div>
+    </div>`;
+}
+
+function wColdPSI(r){
+  return`<div class="t2x2">
+    <div class="tc"><div class="cl">LF</div>${sp('r_clf',r.clf,0.5,0,null,'0.0')}</div>
+    <div class="tc"><div class="cl">RF</div>${sp('r_crf',r.crf,0.5,0,null,'0.0')}</div>
+    <div class="tc"><div class="cl">LR</div>${sp('r_clr',r.clr,0.5,0,null,'0.0')}</div>
+    <div class="tc"><div class="cl">RR</div>${sp('r_crr',r.crr,0.5,0,null,'0.0')}</div>
+  </div>`;
+}
+
+function wHotPSI(r){
+  return`<div class="t2x2">
+    <div class="tc"><div class="cl">LF</div>${sp('r_hlf',r.hlf,0.5,0,null,'0.0')}</div>
+    <div class="tc"><div class="cl">RF</div>${sp('r_hrf',r.hrf,0.5,0,null,'0.0')}</div>
+    <div class="tc"><div class="cl">LR</div>${sp('r_hlr',r.hlr,0.5,0,null,'0.0')}</div>
+    <div class="tc"><div class="cl">RR</div>${sp('r_hrr',r.hrr,0.5,0,null,'0.0')}</div>
+  </div>`;
+}
+
+function wBuilds(r){
+  return`<div class="sec">Builds (Hot - Cold)</div>
+  <div class="builds-grid">
+    <div class="build-cell"><div class="build-lbl">LF</div><div class="build-val" id="bld_lf">--</div></div>
+    <div class="build-cell"><div class="build-lbl">RF</div><div class="build-val" id="bld_rf">--</div></div>
+    <div class="build-cell"><div class="build-lbl">LR</div><div class="build-val" id="bld_lr">--</div></div>
+    <div class="build-cell"><div class="build-lbl">RR</div><div class="build-val" id="bld_rr">--</div></div>
+  </div>`;
+}
+
+function wChassis(r){
+  return`
+  <div class="g3 mb">
+    ${spf('Bar Load (lbs)','r_barload',r.bar_load,5,0,null,'200')}
+    ${spf('Brake Bias F (psi)','r_bbiasf',r.bbias_f,1,0,null,'0')}
+    ${spf('Brake Bias R (psi)','r_bbiasr',r.bbias_r,1,0,null,'0')}
+  </div>
+  <div class="sec nb">Cross Member</div>
+  <div class="xmem-grid mb">
+    <div class="field"><label>Left</label>${fracSp('r_xmem_l',r.xmem_l,0,0.25,false)}</div>
+    <div class="field"><label>Right</label>${fracSp('r_xmem_r',r.xmem_r,0,0.25,false)}</div>
+  </div>
+  <div class="g2">
+    ${spf('Tape Config (%)','r_tape',r.tape,5,0,100,'0')}
+    ${spf('Fuel (gal)','r_fuel',r.fuel,1,0,null,'0')}
+  </div>`;
+}
+
+function wTemps(r){
+  const items=r.temps.map((t,i)=>`
+    <div class="temp-item">
+      <div class="temp-header">
+        <span class="tname">${t.name}</span>
+        <button class="tremove" onclick="removeTemp(${i})" title="Remove">x</button>
+      </div>
+      ${sp('r_temp_'+i,t.val,1,100,null,String(t.val))}
+    </div>`).join('');
+  return`<div id="temps-body">${items}</div>`;
+}
+
+function wTireTemps(r){
+  const spxs=(id,val)=>`<div class="sp xs">
+    <button class="spb" onpointerdown="startStep('${id}',-1,0,null)" onpointerup="stopStep()" onpointercancel="stopStep()">-</button>
+    <input type="number" id="${id}" value="${val??''}" step="1" placeholder="0">
+    <button class="spb" onpointerdown="startStep('${id}',1,0,null)" onpointerup="stopStep()" onpointercancel="stopStep()">+</button>
+  </div>`;
+  const corn=(l,c)=>`<div class="tc"><div class="cl">${l}</div>
+    <div class="tt-row">
+      <div class="tt-cell"><div class="tt-lbl">I</div>${spxs('r_tt'+c+'0',(r['t'+c]||[])[0])}</div>
+      <div class="tt-cell"><div class="tt-lbl">M</div>${spxs('r_tt'+c+'1',(r['t'+c]||[])[1])}</div>
+      <div class="tt-cell"><div class="tt-lbl">O</div>${spxs('r_tt'+c+'2',(r['t'+c]||[])[2])}</div>
+    </div></div>`;
+  return`<div class="t2x2">${corn('LF','lf')}${corn('RF','rf')}${corn('LR','lr')}${corn('RR','rr')}</div>`;
+}
+
+function wBrkTemps(r){
+  return`<div class="t2x2">
+    <div class="tc"><div class="cl">LF</div>${sp('r_bklf',r.bklf,5,0,null,'0')}</div>
+    <div class="tc"><div class="cl">RF</div>${sp('r_bkrf',r.bkrf,5,0,null,'0')}</div>
+    <div class="tc"><div class="cl">LR</div>${sp('r_bklr',r.bklr,5,0,null,'0')}</div>
+    <div class="tc"><div class="cl">RR</div>${sp('r_bkrr',r.bkrr,5,0,null,'0')}</div>
+  </div>`;
+}
+
+function wNotes(r){
+  const lbl=r.notes_label||'Comments';
+  return`
+  <div class="notes-toolbar">
+    <button class="notes-lbl-btn" onclick="toggleNotesLabel()">${lbl}</button>
+    <button class="tb" onclick="clearNotesCanvas()" style="min-height:26px;padding:2px 8px;font-size:11px">Clear Drawing</button>
+    <span style="font-size:9px;color:var(--dim)">Pencil to draw · type below</span>
+  </div>
+  <div class="canvas-wrap">
+    <canvas id="notes-cvs"></canvas>
+    <div class="canvas-hint" id="cvs-hint">Draw here with Apple Pencil or stylus</div>
+  </div>
+  <textarea id="notes-txt" style="width:100%;margin-top:6px;background:var(--inp);border:1px solid var(--bd);color:var(--txt);border-radius:4px;padding:6px 8px;font-size:12px;resize:none;min-height:60px;outline:none"
+    placeholder="Type notes here..."
+    onfocus="this.style.borderColor='var(--acc)'"
+    onblur="this.style.borderColor='var(--bd)';autosave()">${r.notes_text||''}</textarea>`;
+}
+
+// ═══════════════════════════════════════════════════
+//  TIRE BOX WIDGET
+// ═══════════════════════════════════════════════════
+function tboxHTML(id,r){
+  const pos=layout[id];if(!pos)return'';
+  const val=r['_'+id]??'';const clr=pos.color||'cold';
+  return`<div style="text-align:center;padding:4px 0">
+    <input id="tbl_${id}" value="${pos.label||''}"
+      style="width:100%;background:none;border:none;border-bottom:1px solid transparent;font-size:12px;font-weight:800;letter-spacing:1px;text-transform:uppercase;cursor:text;text-align:center;outline:none;color:${clr==='hot'?'var(--accH)':'#5599ff'};padding:2px 0"
+      onfocus="this.style.borderBottomColor='var(--acc)'" onblur="this.style.borderBottomColor='transparent'"
+      onchange="layout['${id}'].label=this.value;const wt=document.querySelector('[data-wid=${id}] .wt');if(wt)wt.textContent=this.value;autosave();">
+    <div style="font-size:9px;color:var(--dim);margin:3px 0">PSI</div>
+  </div>
+  <div class="sp">
+    <button class="spb" onpointerdown="startStep('tb_v_${id}',-0.5,0)" onpointerup="stopStep()" onpointercancel="stopStep()">-</button>
+    <input type="number" id="tb_v_${id}" value="${val}" step="0.5" style="font-size:22px;font-weight:900">
+    <button class="spb" onpointerdown="startStep('tb_v_${id}',0.5,0)" onpointerup="stopStep()" onpointercancel="stopStep()">+</button>
+  </div>`;
+}
+
+function addTireBox(){
+  const lbl=document.getElementById('tb-lbl').value.trim()||'PSI';
+  const fld=document.getElementById('tb-fld').value;
+  const hot=fld.startsWith('h');
+  const nid='tbx_'+(tbxN++);
+  layout[nid]={x:20+(tbxN%8)*12,y:20+(tbxN%6)*12,w:220,h:130,v:true,type:'tire_box',label:lbl,field:fld,color:hot?'hot':'cold'};
+  const def=getDef(nid,'tire_box');buildWidget(nid,def,layout[nid]);
+  hookInputs();autosave();closeM('m-pick');toast(lbl+' box added');
+}
+
+// ═══════════════════════════════════════════════════
+//  TEMPS MANAGEMENT
+// ═══════════════════════════════════════════════════
+const TEMP_OPTIONS=['Water','Oil','Trans','Rear End','Intercooler','Cylinder Head','Exhaust'];
+function addTempSensor(){
+  const r=getRun();
+  // Open mini picker
+  const name=prompt('Sensor name:\n'+TEMP_OPTIONS.map((t,i)=>`${i+1}. ${t}`).join('\n')+'\n\nOr type custom name:');
+  if(!name)return;
+  const resolved=TEMP_OPTIONS.find((_,i)=>String(i+1)===name.trim())||name.trim();
+  r.temps.push({name:resolved,val:100});
+  const wb=document.querySelector('[data-wid="temps"] .wb');if(wb)wb.innerHTML=wTemps(r);
+  hookInputs();autosave();
+}
+function removeTemp(i){
+  const r=getRun();
+  if(r.temps.length<=1){toast('Need at least 1 sensor');return;}
+  r.temps.splice(i,1);
+  const wb=document.querySelector('[data-wid="temps"] .wb');if(wb)wb.innerHTML=wTemps(r);
+  hookInputs();autosave();
+}
+
+// ═══════════════════════════════════════════════════
+//  LAP TIMES
+// ═══════════════════════════════════════════════════
+function openLaps(){
+  const r=getRun();
+  document.getElementById('laps-title').textContent='Lap Times — Run '+r.n;
+  renderLapsList();openM('m-laps');
+  setTimeout(()=>document.getElementById('lap-inp').focus(),100);
+}
+function renderLapsList(){
+  const r=getRun();
+  const times=r.lapTimes||[];
+  const fastest=calcFastest(times);
+  document.getElementById('laps-list').innerHTML=times.length===0
+    ?'<div style="color:var(--dim);font-size:11px;padding:6px 0">No laps yet</div>'
+    :times.map((t,i)=>`
+      <div class="lap-row">
+        <span class="lap-num">${i+1}</span>
+        <span class="lap-time${t===fastest?' fastest':''}">${t}</span>
+        ${t===fastest?'<span style="font-size:9px;color:var(--acc);font-weight:800">BEST</span>':''}
+        <button class="lap-del" onclick="deleteLap(${i})">x</button>
+      </div>`).join('');
+}
+function addLap(){
+  const inp=document.getElementById('lap-inp');
+  const v=inp.value.trim();if(!v)return;
+  getRun().lapTimes.push(v);
+  inp.value='';renderLapsList();renderStrip();autosave();
+  inp.focus();
+}
+function deleteLap(i){
+  getRun().lapTimes.splice(i,1);renderLapsList();renderStrip();autosave();
+}
+
+// Normalize lap time input: "14232" → "14.232", "1:14232" → "1:14.232"
+function normalizeLapTime(v){
+  v=v.trim();
+  // Already has decimal: keep as-is
+  if(v.includes('.'))return v;
+  // MM:SSMMM format (e.g. "1:14232") → "1:14.232"
+  const colonParts=v.split(':');
+  if(colonParts.length===2){
+    const s=colonParts[1];
+    if(s.length>3)return colonParts[0]+':'+(s.slice(0,-3)+'.'+s.slice(-3));
+    return v;
+  }
+  // Pure digits ≥4 chars: last 3 = thousandths, rest = seconds
+  if(/^\d+$/.test(v)&&v.length>=4)return v.slice(0,-3)+'.'+v.slice(-3);
+  return v;
+}
+
+function addLapInline(){
+  const inp=document.getElementById('ri-lap-inp');
+  const raw=inp.value.trim();if(!raw)return;
+  const v=normalizeLapTime(raw);
+  getRun().lapTimes.push(v);
+  inp.value='';
+  const wb=document.querySelector('[data-wid="run_info"] .wb');
+  if(wb){wb.innerHTML=wRunInfo(getRun());hookInputs();}
+  renderStrip();autosave();
+  // Re-focus input
+  setTimeout(()=>document.getElementById('ri-lap-inp')?.focus(),20);
+}
+
+function deleteLapInline(i){
+  getRun().lapTimes.splice(i,1);
+  const wb=document.querySelector('[data-wid="run_info"] .wb');
+  if(wb){wb.innerHTML=wRunInfo(getRun());hookInputs();}
+  renderStrip();autosave();
+}
+
+// ═══════════════════════════════════════════════════
+//  NOTES CANVAS
+// ═══════════════════════════════════════════════════
+function initNotesCanvas(){
+  const cvs=document.getElementById('notes-cvs');
+  if(!cvs)return;
+  const dpr=window.devicePixelRatio||1;
+  const w=cvs.parentElement.clientWidth||300;
+  const h=120;
+  cvs.width=w*dpr;cvs.height=h*dpr;
+  cvs.style.width=w+'px';cvs.style.height=h+'px';
+  canvasCtx=cvs.getContext('2d');
+  canvasCtx.scale(dpr,dpr);
+  canvasCtx.strokeStyle='#eeeeee';canvasCtx.lineWidth=2;canvasCtx.lineCap='round';canvasCtx.lineJoin='round';
+  // Load saved drawing
+  const r=getRun();
+  if(r.notes_canvas){
+    const img=new Image();
+    img.onload=()=>{canvasCtx.drawImage(img,0,0,w,h);};
+    img.src=r.notes_canvas;
+  }
+  // Remove old listeners
+  const nc=cvs.cloneNode(true);cvs.parentNode.replaceChild(nc,cvs);
+  canvasCtx=nc.getContext('2d');canvasCtx.scale(dpr,dpr);
+  canvasCtx.strokeStyle='#eeeeee';canvasCtx.lineWidth=2;canvasCtx.lineCap='round';canvasCtx.lineJoin='round';
+  if(r.notes_canvas){const img=new Image();img.onload=()=>{canvasCtx.drawImage(img,0,0,w,h);};img.src=r.notes_canvas;}
+  const hint=document.getElementById('cvs-hint');
+  nc.style.touchAction='none';
+  let ld=false,lx,ly;
+  nc.addEventListener('pointerdown',e=>{
+    ld=true;const rect=nc.getBoundingClientRect();
+    lx=e.clientX-rect.left;ly=e.clientY-rect.top;
+    canvasCtx.lineWidth=Math.max(1,(e.pressure||0.5)*4);
+    if(hint)hint.style.display='none';
+    nc.setPointerCapture(e.pointerId);
+  });
+  nc.addEventListener('pointermove',e=>{
+    if(!ld)return;
+    const rect=nc.getBoundingClientRect();
+    const cx=e.clientX-rect.left,cy=e.clientY-rect.top;
+    canvasCtx.lineWidth=Math.max(1,(e.pressure||0.5)*4);
+    canvasCtx.beginPath();canvasCtx.moveTo(lx,ly);canvasCtx.lineTo(cx,cy);canvasCtx.stroke();
+    lx=cx;ly=cy;
+  });
+  nc.addEventListener('pointerup',()=>{
+    ld=false;
+    getRun().notes_canvas=nc.toDataURL('image/png');autosave();
+  });
+  nc.addEventListener('pointercancel',()=>{ld=false;});
+}
+
+function clearNotesCanvas(){
+  const cvs=document.getElementById('notes-cvs');if(!cvs||!canvasCtx)return;
+  canvasCtx.clearRect(0,0,cvs.width,cvs.height);
+  getRun().notes_canvas='';autosave();
+  const hint=document.getElementById('cvs-hint');if(hint)hint.style.display='flex';
+}
+
+function toggleNotesLabel(){
+  const r=getRun();
+  r.notes_label=r.notes_label==='Comments'?'Changes':'Comments';
+  const btn=document.querySelector('.notes-lbl-btn');if(btn)btn.textContent=r.notes_label;
+  autosave();
+}
+
+// ═══════════════════════════════════════════════════
+//  WIDGET SETTINGS
+// ═══════════════════════════════════════════════════
+function openSettings(id){
+  const pos=layout[id];const def=getDef(id,pos?.type);
+  const title=document.getElementById('settings-title');
+  const body=document.getElementById('settings-body');
+  title.textContent=(def?.title||id)+' Settings';
+  const type=pos?.type||id;
+  if(type==='temps'){
+    body.innerHTML=`
+      <div class="msub">Available Sensors</div>
+      <div id="sett-temps">${TEMP_OPTIONS.map(t=>`
+        <div class="pi" onclick="addTempByName('${t}')">
+          <span class="pn">${t}</span><span class="pbg">+ Add</span>
+        </div>`).join('')}
+      </div>
+      <input class="mi" id="sett-custom-temp" type="text" placeholder="Custom sensor name">
+      <button class="tb red" style="width:100%;min-height:30px" onclick="addTempByName(document.getElementById('sett-custom-temp').value)">Add Custom</button>`;
+  } else if(type==='tire_box'){
+    body.innerHTML=`
+      <div class="field mb"><label>Label</label><input type="text" class="mi" id="sett-tbox-lbl" value="${pos.label||''}" onchange="layout['${id}'].label=this.value;const wt=document.querySelector('[data-wid=${id}] .wt');if(wt)wt.textContent=this.value;autosave()"></div>
+      <button class="tb red" style="width:100%;min-height:30px;margin-top:8px" onclick="if(confirm('Remove this box?')){deleteTireBox('${id}');closeM('m-settings');}">Remove Box</button>`;
+  } else if(type==='notes'){
+    const r=getRun();
+    body.innerHTML=`
+      <div class="msub">Label</div>
+      <div class="g2 mb">
+        <button class="tb${(r.notes_label||'Comments')==='Comments'?' red':''}" onclick="forceNotesLabel('Comments',this)">Comments</button>
+        <button class="tb${(r.notes_label||'Comments')==='Changes'?' red':''}" onclick="forceNotesLabel('Changes',this)">Changes</button>
+      </div>
+      <button class="tb" style="width:100%;min-height:30px" onclick="clearNotesCanvas();toast('Canvas cleared')">Clear Drawing</button>`;
+  } else {
+    body.innerHTML=`<div style="color:var(--dim);font-size:12px;padding:8px 0">No additional settings for this widget.</div>`;
+  }
+  openM('m-settings');
+}
+
+function addTempByName(name){
+  if(!name||!name.trim())return;
+  getRun().temps.push({name:name.trim(),val:100});
+  const wb=document.querySelector('[data-wid="temps"] .wb');if(wb)wb.innerHTML=wTemps(getRun());
+  hookInputs();autosave();closeM('m-settings');toast(name+' added');
+}
+function forceNotesLabel(lbl,btn){
+  getRun().notes_label=lbl;autosave();
+  document.querySelectorAll('.notes-lbl-btn').forEach(b=>b.textContent=lbl);
+  document.getElementById('settings-body').querySelectorAll('.tb').forEach(b=>b.classList.remove('red'));
+  btn.classList.add('red');
+}
+function deleteTireBox(id){
+  delete layout[id];document.querySelector(`[data-wid="${id}"]`)?.remove();autosave();toast('Removed');
+}
+
+// ═══════════════════════════════════════════════════
+//  WIDGET PICKER
+// ═══════════════════════════════════════════════════
+function openPicker(){
+  document.getElementById('pick-std').innerHTML=STD.map(d=>{
+    const vis=layout[d.id]?.v??false;
+    return`<div class="pi${vis?'':' off'}" onclick="${vis?`closeM('m-pick')`:`showW('${d.id}')`}">
+      <span class="pn">${d.title}</span>
+      <span class="pbg">${vis?'Visible':'Tap to restore'}</span>
+    </div>`;
+  }).join('');
+  const tboxKeys=Object.keys(layout).filter(k=>layout[k].type==='tire_box');
+  document.getElementById('pick-boxes').innerHTML=tboxKeys.length
+    ?'<div class="msub">Your Tire Boxes</div>'+tboxKeys.map(k=>`
+      <div class="pi">
+        <span class="pn">${layout[k].label}</span>
+        <span class="pbg" style="cursor:pointer" onclick="${layout[k].v?`closeW('${k}');openPicker()`:`showW('${k}')`}">${layout[k].v?'Hide':'Show'}</span>
+        <span style="color:var(--acc);font-size:10px;cursor:pointer;margin-left:8px" onclick="deleteTireBox('${k}');openPicker()">Remove</span>
+      </div>`).join(''):'';
+  document.getElementById('tb-lbl').value='';openM('m-pick');
+}
+
+// ═══════════════════════════════════════════════════
+//  LOG
+// ═══════════════════════════════════════════════════
+function showLog(){
+  autosave();
+  const runs=curSessObj().runs;
+  document.getElementById('log-list').innerHTML=runs.map((r,i)=>`
+    <div class="pi" onclick="closeM('m-log');switchRun(${i})">
+      <div><div class="pn">Run ${r.n} — ${calcFastest(r.lapTimes)||'--'}</div>
+      <div style="font-size:9px;color:var(--dim);margin-top:2px">${r.lapTimes.length} laps · Cold: ${r.clf}/${r.crf}/${r.clr}/${r.crr}</div></div>
+      <span style="color:var(--acc);font-size:17px">›</span>
+    </div>`).join('');
+  openM('m-log');
+}
+function clearRuns(){
+  if(!confirm('Clear all runs in this session?'))return;
+  curSessObj().runs=[blankRun(1)];curRun=0;
+  renderStrip();refreshRunWidgets();closeM('m-log');autosave();toast('Runs cleared');
+}
+
+// ═══════════════════════════════════════════════════
+//  PDF EXPORT
+// ═══════════════════════════════════════════════════
+function printPDF(){
+  autosave();const s=curSessObj();const runs=s.runs;
+  // Stagger calc helper for PDF
+  const stagF=r=>{const d=r.circ_rf-r.circ_lf;return(d>=0?'+':'')+toFrac(Math.abs(d))+(d<0?' (-)':'');};
+  const stagR=r=>{const d=r.circ_rr-r.circ_lr;return(d>=0?'+':'')+toFrac(Math.abs(d))+(d<0?' (-)':'');};
+  // Tire box helper
+  const tboxKeys=Object.keys(layout).filter(k=>layout[k].type==='tire_box');
+  // Max temps count across runs
+  const maxTemps=Math.max(...runs.map(r=>r.temps.length),0);
+
+  const rows=[
+    ['Fastest Lap',runs.map(r=>calcFastest(r.lapTimes)||'-')],
+    ['Lap Count',  runs.map(r=>r.lapTimes.length||r.lapCount||'-')],
+    ['Tire Set',   runs.map(r=>r.tset||'-')],
+    [null,null],
+    ['LF Circ',    runs.map(r=>toFrac(r.circ_lf))],
+    ['RF Circ',    runs.map(r=>toFrac(r.circ_rf))],
+    ['LR Circ',    runs.map(r=>toFrac(r.circ_lr))],
+    ['RR Circ',    runs.map(r=>toFrac(r.circ_rr))],
+    ['Stagger Front', runs.map(r=>stagF(r))],
+    ['Stagger Rear',  runs.map(r=>stagR(r))],
+    [null,null],
+    ['Cold LF',    runs.map(r=>r.clf||'-')],
+    ['Cold RF',    runs.map(r=>r.crf||'-')],
+    ['Cold LR',    runs.map(r=>r.clr||'-')],
+    ['Cold RR',    runs.map(r=>r.crr||'-')],
+    ['Hot LF',     runs.map(r=>r.hlf||'-')],
+    ['Hot RF',     runs.map(r=>r.hrf||'-')],
+    ['Hot LR',     runs.map(r=>r.hlr||'-')],
+    ['Hot RR',     runs.map(r=>r.hrr||'-')],
+    ['Build LF',   runs.map(r=>{ const b=(parseFloat(r.hlf)||0)-(parseFloat(r.clf)||0); return r.hlf?((b>=0?'+':'')+b.toFixed(1)):'-'; })],
+    ['Build RF',   runs.map(r=>{ const b=(parseFloat(r.hrf)||0)-(parseFloat(r.crf)||0); return r.hrf?((b>=0?'+':'')+b.toFixed(1)):'-'; })],
+    ['Build LR',   runs.map(r=>{ const b=(parseFloat(r.hlr)||0)-(parseFloat(r.clr)||0); return r.hlr?((b>=0?'+':'')+b.toFixed(1)):'-'; })],
+    ['Build RR',   runs.map(r=>{ const b=(parseFloat(r.hrr)||0)-(parseFloat(r.crr)||0); return r.hrr?((b>=0?'+':'')+b.toFixed(1)):'-'; })],
+    [null,null],
+    ['Bar Load',   runs.map(r=>r.bar_load||'-')],
+    ['Bias Front', runs.map(r=>r.bbias_f||'-')],
+    ['Bias Rear',  runs.map(r=>r.bbias_r||'-')],
+    ['X-Mem L',    runs.map(r=>toFracNoWhole(r.xmem_l||0))],
+    ['X-Mem R',    runs.map(r=>toFracNoWhole(r.xmem_r||0))],
+    ['Tape %',     runs.map(r=>r.tape||'-')],
+    ['Fuel',       runs.map(r=>r.fuel||'-')],
+    [null,null],
+    ...Array.from({length:maxTemps},(_,ti)=>[
+      runs[0]?.temps[ti]?.name||('Temp '+(ti+1)),
+      runs.map(r=>(r.temps[ti]?.val)||'-')
+    ]),
+    [null,null],
+    ['Tire Temp LF I', runs.map(r=>(r.tlf||[])[0]||'-')],
+    ['Tire Temp LF M', runs.map(r=>(r.tlf||[])[1]||'-')],
+    ['Tire Temp LF O', runs.map(r=>(r.tlf||[])[2]||'-')],
+    ['Tire Temp RF I', runs.map(r=>(r.trf||[])[0]||'-')],
+    ['Tire Temp RF M', runs.map(r=>(r.trf||[])[1]||'-')],
+    ['Tire Temp RF O', runs.map(r=>(r.trf||[])[2]||'-')],
+    ['Tire Temp LR I', runs.map(r=>(r.tlr||[])[0]||'-')],
+    ['Tire Temp LR M', runs.map(r=>(r.tlr||[])[1]||'-')],
+    ['Tire Temp LR O', runs.map(r=>(r.tlr||[])[2]||'-')],
+    ['Tire Temp RR I', runs.map(r=>(r.trr||[])[0]||'-')],
+    ['Tire Temp RR M', runs.map(r=>(r.trr||[])[1]||'-')],
+    ['Tire Temp RR O', runs.map(r=>(r.trr||[])[2]||'-')],
+    [null,null],
+    ['Brake Temp LF',  runs.map(r=>r.bklf||'-')],
+    ['Brake Temp RF',  runs.map(r=>r.bkrf||'-')],
+    ['Brake Temp LR',  runs.map(r=>r.bklr||'-')],
+    ['Brake Temp RR',  runs.map(r=>r.bkrr||'-')],
+    ...(tboxKeys.length?[[null,null]]:[]),
+    ...tboxKeys.map(k=>[layout[k].label||k, runs.map(r=>r['_'+k]||'-')]),
+  ];
+  const nc=runs.length;
+  const thead=`<tr><th class="rh">Field</th>${runs.map(r=>`<th>Run ${r.n}</th>`).join('')}</tr>`;
+  const tbody=rows.map(([l,vals])=>{
+    if(!vals)return`<tr class="div"><td class="rh" colspan="${nc+1}">—</td></tr>`;
+    return`<tr><td class="rh">${l}</td>${vals.map(v=>`<td>${v??'-'}</td>`).join('')}</tr>`;
+  }).join('');
+  const notes=runs.filter(r=>r.notes_text||r.notes_canvas||r.lapTimes.length).map(r=>`
+    <div class="pnotes-row">
+      <div class="pnotes-run">Run ${r.n}</div>
+      <div class="pnotes-body">
+        ${r.lapTimes.length?`<div><b>Laps (${r.lapTimes.length}):</b> ${r.lapTimes.join(', ')}</div>`:''}
+        ${r.notes_text?`<div style="margin-top:3px"><b>${r.notes_label||'Notes'}:</b> ${r.notes_text}</div>`:''}
+        ${r.notes_canvas?`<div style="margin-top:4px"><b>Drawing:</b><br><img src="${r.notes_canvas}" style="max-width:100%;max-height:160px;border:1px solid #ddd;margin-top:2px;border-radius:3px;object-fit:contain;display:block"></div>`:''}
+      </div>
+    </div>`).join('');
+  document.getElementById('pview').innerHTML=`
+    <div class="ph1"><h1>LATE MODEL SETUP SHEET</h1>
+      <h2>${s.name} · ${s.track||'Track'} · ${s.date||''}</h2></div>
+    <div class="psess">
+      <div><label>Driver</label><span>${s.driver||'-'}</span></div>
+      <div><label>Chassis</label><span>${s.chassis||'-'}</span></div>
+      <div><label>Air Temp</label><span>${s.air||'-'}°F</span></div>
+      <div><label>Track Temp</label><span>${s.trk||'-'}°F</span></div>
+      <div><label>Practice #</label><span>${s.pnum||'-'}</span></div>
+      <div><label>Length</label><span>${s.plen||'-'}</span></div>
+    </div>
+    <div class="psect">Run Comparison — ${nc} Run${nc!==1?'s':''}</div>
+    <table class="ptbl"><thead>${thead}</thead><tbody>${tbody}</tbody></table>
+    ${notes?`<div class="psect">Lap Times, Notes &amp; Drawings</div>${notes}`:''}`;
+  setTimeout(()=>window.print(),80);
+}
+
+// ═══════════════════════════════════════════════════
+//  LOGO
+// ═══════════════════════════════════════════════════
+function uploadLogo(){document.getElementById('logo-inp').click();}
+function setLogo(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=ev=>{localStorage.setItem('lm_logo',ev.target.result);applyLogoData(ev.target.result);toast('Logo updated');};
+  r.readAsDataURL(f);e.target.value='';
+}
+function applyLogoData(b64){
+  const img=document.getElementById('logo-img');
+  const txt=document.getElementById('logo-text');
+  const hint=document.getElementById('logo-hint');
+  img.src=b64;img.style.display='block';
+  txt.style.display='none';hint.style.display='none';
+}
+
+// ═══════════════════════════════════════════════════
+//  EXPORT / IMPORT
+// ═══════════════════════════════════════════════════
+function exportJSON(){
+  autosave();const s=curSessObj();
+  const blob=new Blob([JSON.stringify({sessions,curSess,layout,tbxN,exported:new Date().toISOString()},null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`lm_${(s.track||'track').replace(/\s+/g,'_')}_${s.date||'date'}.json`;
+  a.click();URL.revokeObjectURL(a.href);toast('Exported');
+}
+function importClick(){document.getElementById('imp').click();}
+function doImport(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    try{const d=JSON.parse(ev.target.result);
+      if(d.layout) layout=Object.assign(dc(DEF),d.layout);
+      if(d.sessions?.length){sessions=d.sessions;curSess=d.curSess||0;curRun=0;}
+      if(d.tbxN) tbxN=d.tbxN;
+      updateSessBtn();renderStrip();renderAll();autosave();
+      toast('Imported '+sessions.length+' session(s)');
+    }catch(err){alert('Invalid file.');}
+  };
+  r.readAsText(f);e.target.value='';
+}
+
+// ═══════════════════════════════════════════════════
+//  MODAL / TOAST
+// ═══════════════════════════════════════════════════
+function openM(id){
+  if(id==='m-sess')openSessModal();
+  else if(id==='m-sess-edit')openEditSession();
+  else document.getElementById(id).classList.add('open');
+}
+function closeM(id){document.getElementById(id).classList.remove('open');}
+document.addEventListener('click',e=>{
+  document.querySelectorAll('.modal.open').forEach(m=>{if(e.target===m)m.classList.remove('open');});
+});
+let tt;
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(tt);tt=setTimeout(()=>el.classList.remove('show'),2400);
+}
+
+// ═══════════════════════════════════════════════════
+//  START
+// ═══════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
