@@ -4,13 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="LM HUD">
 <meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#080808">
 <title>Late Model HUD</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<!-- Firebase SDK (loaded before app script so auth is ready on DOMContentLoaded) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 <style>
 :root{
   --acc-tint:#2a0404;--acc-tint2:#3a0404;--acc-dim:#160303;--acc-ghost:#0f0202;
@@ -21,7 +23,7 @@
   --ih:36px;--wh:26px;--r:5px;
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-html,body{height:100%;background:var(--bg);color:var(--txt);font-family:'Montserrat','Segoe UI',Arial,sans-serif;font-size:1rem;overflow:hidden}
+html,body{height:100%;background:var(--bg);color:var(--txt);font-family:Arial,sans-serif;font-size:1rem;font-weight:700;overflow:hidden}
 input,textarea,button,select{font-family:inherit}
 
 /* SHELL */
@@ -65,9 +67,23 @@ input,textarea,button,select{font-family:inherit}
 
 /* SETTINGS PANEL */
 #settings-panel{background:#0d0d0d;border-bottom:2px solid var(--acc);
-  max-height:0;overflow:hidden;transition:max-height .25s ease,border-color .25s;flex-shrink:0}
-#settings-panel.open{max-height:220px}
-#sp-inner{padding:8px 12px 10px}
+  max-height:0;overflow:hidden;transition:max-height .35s ease,border-color .25s;flex-shrink:0}
+#settings-panel.open{max-height:min(380px,48vh)}
+#sp-inner{padding:8px 12px 10px;overflow-y:auto;max-height:inherit}
+/* Named layout slots */
+.nl-slot{display:flex;align-items:center;gap:6px;padding:5px 8px;background:var(--inp);border:1px solid var(--bd);border-radius:4px;margin-bottom:4px}
+.nl-name{flex:1;font-size:0.85rem;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nl-meta{font-size:0.62rem;color:var(--dim);white-space:nowrap;flex-shrink:0}
+.nl-btn{background:none;border:1px solid var(--bd);color:var(--dim);border-radius:3px;padding:2px 8px;font-size:0.69rem;font-weight:700;cursor:pointer;touch-action:manipulation;letter-spacing:.3px;white-space:nowrap}
+.nl-btn.load{color:var(--acc);border-color:var(--acc-faint2)}
+.nl-btn.load:active{background:var(--acc);color:#fff}
+.nl-btn.del:active{color:#ff6060}
+/* Logo upload area */
+.logo-upload-zone{border:2px dashed var(--bd);border-radius:6px;padding:10px;text-align:center;cursor:pointer;transition:border-color .15s}
+.logo-upload-zone:hover{border-color:var(--acc)}
+.logo-upload-zone:active{border-color:var(--accH);background:var(--acc-ghost)}
+.logo-upload-zone img{max-height:44px;max-width:120px;object-fit:contain;display:block;margin:0 auto 4px}
+.logo-upload-zone span{font-size:0.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:.8px}
 #sp-tabs{display:flex;gap:4px;margin-bottom:9px;border-bottom:1px solid var(--bd);padding-bottom:7px;flex-wrap:wrap}
 .sp-tab{background:none;border:none;color:var(--dim);font-size:0.85rem;font-weight:700;
   padding:3px 10px;cursor:pointer;border-radius:4px;touch-action:manipulation;
@@ -312,7 +328,7 @@ select.mi{cursor:pointer}
 #pview{display:none}
 @media print{
   *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;box-sizing:border-box}
-  html,body{overflow:visible!important;height:auto!important;background:#fff!important;color:#111!important;font-size:9px;font-family:'Montserrat','Segoe UI',Arial,sans-serif;margin:0;padding:0}
+  html,body{overflow:visible!important;height:auto!important;background:#fff!important;color:#111!important;font-size:9px;font-family:Arial,sans-serif;margin:0;padding:0}
   #shell{display:none!important}
   #pview{display:block!important;padding:18px 20px}
   /* Header */
@@ -392,13 +408,51 @@ select.mi{cursor:pointer}
 </style>
 </head>
 <body>
-<div id="shell">
+
+<!-- ═══════════ LOGIN SCREEN ═══════════ -->
+<div id="login-screen" style="position:fixed;inset:0;background:#080808;z-index:3000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;padding-top:env(safe-area-inset-top)">
+  <div style="width:100%;max-width:340px">
+    <div style="text-align:center;margin-bottom:28px">
+      <!-- Login logo — independent from HUD topbar logo -->
+      <div id="login-logo-area" onclick="document.getElementById('login-logo-inp-screen').click()"
+        style="width:180px;height:90px;border:2px dashed var(--bd);border-radius:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;margin:0 auto 12px;transition:border-color .15s;position:relative"
+        title="Click to upload your team/sponsor logo">
+        <img id="login-logo-img" style="max-width:160px;max-height:78px;object-fit:contain;display:none;border-radius:5px">
+        <div id="login-logo-placeholder" style="display:flex;flex-direction:column;align-items:center;gap:4px">
+          <span style="font-size:1.54rem;color:var(--dim)">&#128247;</span>
+          <span style="font-size:0.54rem;color:var(--dim);letter-spacing:1px;text-transform:uppercase">Add Your Logo</span>
+        </div>
+      </div>
+      <input type="file" id="login-logo-inp-screen" accept="image/*" style="display:none" onchange="setLoginLogoFromScreen(event)">
+      <div id="login-logo-text" style="font-size:1.54rem;font-weight:900;color:var(--acc);letter-spacing:4px;text-transform:uppercase">LM HUD</div>
+      <div style="font-size:0.62rem;color:var(--dim);letter-spacing:1.5px;text-transform:uppercase;margin-top:4px">Late Model Racing Dashboard</div>
+    </div>
+    <input class="mi" id="login-email" type="email" placeholder="Email address" autocomplete="email"
+      onkeydown="if(event.key==='Enter')document.getElementById('login-pass').focus()">
+    <input class="mi" id="login-pass" type="password" placeholder="Password" autocomplete="current-password"
+      onkeydown="if(event.key==='Enter')doLogin()">
+    <div id="login-err" style="color:#ff6060;font-size:0.77rem;min-height:18px;margin:-2px 0 6px;text-align:center"></div>
+    <button class="tb red" id="login-btn" onclick="doLogin()"
+      style="width:100%;min-height:46px;font-size:1rem;font-weight:800;letter-spacing:1px;margin-bottom:10px">Login</button>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+      <div style="flex:1;height:1px;background:var(--bd)"></div>
+      <span style="font-size:0.62rem;color:var(--dim);letter-spacing:1px;flex-shrink:0">NEW USER</span>
+      <div style="flex:1;height:1px;background:var(--bd)"></div>
+    </div>
+    <button class="tb" onclick="doCreateAccount()"
+      style="width:100%;min-height:40px;font-size:0.92rem">Create Account</button>
+    <div id="login-loading" style="display:none;text-align:center;margin-top:20px">
+      <span style="font-size:0.77rem;color:var(--dim);letter-spacing:1px">Connecting...</span>
+    </div>
+  </div>
+</div>
+
+<div id="shell" style="display:none">
 
 <!-- TOPBAR -->
 <div id="topbar">
-  <div id="logo-area" onclick="uploadLogo()" title="Click to upload logo">
+  <div id="logo-area">
     <img id="logo-img"><span id="logo-text">LM HUD</span>
-    <span id="logo-hint">tap</span>
   </div>
   <input type="file" id="logo-inp" accept="image/*" style="display:none" onchange="setLogo(event)">
   <div class="gap"></div>
@@ -415,7 +469,11 @@ select.mi{cursor:pointer}
   <button class="tb" onclick="toggleFullscreen()" title="Fullscreen" id="fsbtn" style="font-size:13px;padding:2px 6px">&#x26F6;</button>
   <button class="tb" onclick="confirmClearAll()" title="Clear All Session Data" style="color:#ff6060;border-color:#552020">Clear Data</button>
   <button class="tb red" onclick="saveAll()">Save</button>
-  <button class="tb" id="settings-tab-btn" onclick="toggleSettingsPanel()" title="Settings">&#9881; Settings</button>
+  <button class="tb" id="cloud-btn" onclick="openCloudModal()" title="Account / Sync" style="display:flex;align-items:center;gap:5px;padding:4px 9px">
+    <span id="sync-dot" style="width:7px;height:7px;border-radius:50%;background:var(--dim);flex-shrink:0;transition:background .3s"></span>
+    <span id="cloud-btn-label">Account</span>
+  </button>
+  <button class="tb" id="settings-tab-btn" onclick="toggleSettingsPanel()" title="Settings">Settings</button>
   <input type="file" id="imp" accept=".json" style="display:none" onchange="doImport(event)">
 </div>
 
@@ -425,55 +483,97 @@ select.mi{cursor:pointer}
     <!-- Tab buttons -->
     <div id="sp-tabs">
       <button class="sp-tab active" id="sched-tab-btn" onclick="spTab('schedule')">Schedule</button>
-      <button class="sp-tab" onclick="spTab('layout')">Layout</button>
+      <button class="sp-tab" onclick="spTab('files')">Files</button>
       <button class="sp-tab" onclick="spTab('color')">Color</button>
-      <button class="sp-tab" onclick="spTab('data')">Data</button>
       <button class="sp-tab" onclick="spTab('display')">Display</button>
     </div>
     <!-- Schedule tab -->
     <div class="sp-pane" id="sp-schedule">
       <div id="sched-list-inline"></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+        <span style="font-size:0.62rem;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;flex-shrink:0">Schedule TZ</span>
+        <select class="mi" id="sched-tz-sel" style="flex:1;min-width:140px;margin:0;font-size:0.77rem" onchange="setSchedTZ(this.value)">
+          <option value="">Device (Auto)</option>
+          <option value="America/New_York">Eastern (ET)</option>
+          <option value="America/Chicago">Central (CT)</option>
+          <option value="America/Denver">Mountain (MT)</option>
+          <option value="America/Los_Angeles">Pacific (PT)</option>
+          <option value="America/Anchorage">Alaska (AKT)</option>
+          <option value="America/Honolulu">Hawaii (HT)</option>
+        </select>
+        <span id="sched-tz-note" style="font-size:0.62rem;color:var(--dim);letter-spacing:.3px;flex:1;min-width:100px"></span>
+      </div>
       <div class="sp-row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
         <div class="field" style="flex:2;min-width:120px"><label>Session Name</label><input class="mi" id="si-name" type="text" placeholder="Practice 1" style="margin-bottom:0"></div>
+        <div class="field" style="flex:1;min-width:110px"><label>Date</label><input class="mi" id="si-date" type="date" style="margin-bottom:0"></div>
         <div class="field" style="flex:1;min-width:90px"><label>Start Time</label><input class="mi" id="si-start" type="time" style="margin-bottom:0"></div>
         <div class="field" style="flex:1;min-width:80px"><label>Duration (min)</label><input class="mi" id="si-dur" type="number" placeholder="30" min="1" style="margin-bottom:0"></div>
         <button class="tb red" style="min-height:34px;white-space:nowrap;flex-shrink:0" onclick="addSchedItem()">+ Add</button>
         <button class="tb" style="min-height:34px;color:#ff6060;flex-shrink:0" onclick="clearSchedule()">Clear All</button>
       </div>
     </div>
-    <!-- Layout tab -->
-    <div class="sp-pane" id="sp-layout" style="display:none">
-      <div class="sp-row" style="gap:8px">
-        <button class="tb" style="flex:1" onclick="saveLayoutOnly()">Save Widget Positions</button>
-        <button class="tb" style="flex:1" onclick="loadLayoutOnly()">Restore Saved Positions</button>
+
+    <!-- Files tab (Layouts + Data, separate) -->
+    <div class="sp-pane" id="sp-files" style="display:none">
+
+      <!-- ── LAYOUTS ── -->
+      <div style="font-size:0.62rem;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;border-bottom:1px solid var(--bd);padding-bottom:3px">Layouts</div>
+      <div id="named-layouts-list" style="margin-bottom:6px"></div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <input class="mi" id="layout-save-name" type="text" placeholder="Layout name (e.g. Bristol Quali)" style="flex:1;margin:0;font-size:0.77rem">
+        <button class="tb red" style="flex-shrink:0;min-height:30px;font-size:0.77rem;padding:4px 10px" onclick="saveNamedLayout()">Save Layout</button>
+      </div>
+
+      <!-- ── DATA ── -->
+      <div style="font-size:0.62rem;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin:10px 0 5px;border-bottom:1px solid var(--bd);padding-bottom:3px">Data</div>
+      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+        <input class="mi" id="export-filename" type="text" placeholder="Export filename (optional)" style="flex:1;min-width:150px;margin:0;font-size:0.77rem">
+        <button class="tb" style="flex-shrink:0;min-height:30px;font-size:0.77rem;padding:4px 10px" onclick="exportJSONNamed()">Export JSON</button>
+        <button class="tb" style="flex-shrink:0;min-height:30px;font-size:0.77rem;padding:4px 10px" onclick="importClick()">Import JSON</button>
       </div>
     </div>
+
     <!-- Color tab -->
     <div class="sp-pane" id="sp-color" style="display:none">
-      <div class="sp-row" style="gap:8px;align-items:center;flex-wrap:wrap">
-        <div class="swatch-row" id="swatches" style="flex:1"></div>
+      <!-- Accent color -->
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+        <div class="swatch-row" id="swatches" style="flex:1;margin:0"></div>
         <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
           <input type="color" id="color-pick" style="width:40px;height:32px;border:1px solid var(--bd);border-radius:4px;background:none;cursor:pointer;padding:2px">
-          <span id="color-hex" style="font-size:12px;font-weight:700;color:var(--txt)"></span>
-          <button class="tb red" onclick="applyCustomColor()">Apply</button>
+          <span id="color-hex" style="font-size:0.77rem;font-weight:700;color:var(--txt)"></span>
+          <button class="tb red" style="padding:4px 10px;min-height:30px;font-size:0.77rem" onclick="applyCustomColor()">Apply</button>
         </div>
       </div>
-    </div>
-    <!-- Data tab -->
-    <div class="sp-pane" id="sp-data" style="display:none">
-      <div class="sp-row" style="gap:8px">
-        <button class="tb" style="flex:1" onclick="exportJSON()">Export Data</button>
-        <button class="tb" style="flex:1" onclick="importClick()">Import Data</button>
+      <!-- Logos -->
+      <div style="font-size:0.62rem;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;border-top:1px solid var(--bd);padding-top:7px">Logos</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <div style="font-size:0.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;font-weight:700">HUD Logo (top bar)</div>
+          <div class="logo-upload-zone" onclick="document.getElementById('logo-inp').click()" id="topbar-logo-zone">
+            <img id="logo-zone-preview" style="display:none">
+            <span id="logo-zone-hint">+ Upload Logo</span>
+          </div>
+          <button class="tb" style="width:100%;margin-top:4px;font-size:0.69rem;min-height:26px;color:#ff6060" onclick="clearTopbarLogo()">Clear</button>
+        </div>
+        <div>
+          <div style="font-size:0.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;font-weight:700">Login Screen Logo</div>
+          <div class="logo-upload-zone" onclick="document.getElementById('login-logo-inp').click()" id="login-logo-zone">
+            <img id="login-logo-zone-preview" style="display:none">
+            <span id="login-logo-zone-hint">+ Upload Logo</span>
+          </div>
+          <button class="tb" style="width:100%;margin-top:4px;font-size:0.69rem;min-height:26px;color:#ff6060" onclick="clearLoginLogo()">Clear</button>
+        </div>
       </div>
+      <input type="file" id="login-logo-inp" accept="image/*" style="display:none" onchange="setLoginLogo(event)">
     </div>
     <!-- Display tab -->
     <div class="sp-pane" id="sp-display" style="display:none">
       <div class="sp-row" style="gap:8px;align-items:center">
         <span style="font-size:0.85rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;flex-shrink:0">Font Size</span>
         <div style="display:flex;align-items:stretch;border:1px solid var(--bd);border-radius:4px;overflow:hidden;background:var(--inp)">
-          <button id="fz-dec" onclick="adjustFontSize(-1)" style="background:#2a0404;border:none;color:var(--acc);font-size:1.31rem;font-weight:700;min-width:34px;min-height:32px;cursor:pointer;touch-action:manipulation;line-height:1;transition:color .15s,background .15s">−</button>
+          <button id="fz-dec" onclick="adjustFontSize(-1)" style="background:var(--acc-tint);border:none;color:var(--acc);font-size:1.31rem;font-weight:700;min-width:34px;min-height:32px;cursor:pointer;touch-action:manipulation;line-height:1;transition:color .15s,background .15s">−</button>
           <span id="fz-display" style="font-size:0.92rem;font-weight:800;min-width:44px;text-align:center;color:var(--txt);display:flex;align-items:center;justify-content:center;border-left:1px solid var(--bd);border-right:1px solid var(--bd);padding:0 4px;transition:color .15s">13px</span>
-          <button id="fz-inc" onclick="adjustFontSize(1)" style="background:#2a0404;border:none;color:var(--acc);font-size:1.31rem;font-weight:700;min-width:34px;min-height:32px;cursor:pointer;touch-action:manipulation;line-height:1;transition:color .15s,background .15s">+</button>
+          <button id="fz-inc" onclick="adjustFontSize(1)" style="background:var(--acc-tint);border:none;color:var(--acc);font-size:1.31rem;font-weight:700;min-width:34px;min-height:32px;cursor:pointer;touch-action:manipulation;line-height:1;transition:color .15s,background .15s">+</button>
         </div>
         <button class="tb" onclick="resetFontSize()" style="font-size:0.85rem;color:var(--dim)">Reset</button>
       </div>
@@ -485,12 +585,14 @@ select.mi{cursor:pointer}
 <div id="sess-strip">
   <div id="scards"></div>
   <div class="sadd" onclick="quickNewSession()" title="New Session">+</div>
+  <div id="sessinfo-btn" onclick="openSessInfo()" title="Session Info" style="display:flex;align-items:center;justify-content:center;padding:0 14px;color:var(--acc);font-size:0.85rem;font-weight:800;cursor:pointer;touch-action:manipulation;flex-shrink:0;border-left:1px solid var(--bd);letter-spacing:.5px;text-transform:uppercase;white-space:nowrap">Sess Info</div>
 </div>
 
 <!-- RUN STRIP -->
 <div id="strip">
   <div id="rcards"></div>
   <div class="radd" onclick="addRun()" title="New Run">+</div>
+  <div id="runinfo-btn" onclick="openRunInfo()" title="Run Info / Lap Times" style="display:flex;align-items:center;justify-content:center;padding:0 14px;color:var(--acc);font-size:0.85rem;font-weight:800;cursor:pointer;touch-action:manipulation;flex-shrink:0;border-left:1px solid var(--bd);letter-spacing:.5px;text-transform:uppercase;white-space:nowrap">Run Info</div>
 </div>
 
 <!-- DASHBOARD -->
@@ -599,6 +701,38 @@ select.mi{cursor:pointer}
 <!-- m-color stub (redirected to settings panel) -->
 <div class="modal" id="m-color" style="display:none!important"></div>
 
+<!-- Run Info Modal -->
+<div class="modal" id="m-runinfo">
+  <div class="mbox">
+    <div class="mt" id="ri-modal-title">Run Info</div>
+    <div id="ri-modal-body"></div>
+    <div class="mbtns">
+      <button class="tb" onclick="closeM('m-runinfo')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Session Info Modal -->
+<div class="modal" id="m-sessinfo">
+  <div class="mbox">
+    <div class="mt" id="ssi-modal-title">Session Info</div>
+    <div id="ssi-modal-body"></div>
+    <div class="mbtns">
+      <button class="tb red" onclick="saveSessInfoModal()">Save Changes</button>
+      <button class="tb" style="margin-left:auto" onclick="closeM('m-sessinfo')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Cloud / Login Modal -->
+<div class="modal" id="m-cloud">
+  <div class="mbox">
+    <div class="mt" id="cloud-title">Cloud Sync</div>
+    <div id="cloud-body"></div>
+    <div class="mbtns" id="cloud-btns"></div>
+  </div>
+</div>
+
 <!-- Print View -->
 <div id="pview"></div>
 <div id="toast"></div>
@@ -636,11 +770,10 @@ function formatTime(sec){
 
 // Widget definitions
 const STD=[
-  {id:'run_info',    title:'Run Info',          fn:wRunInfo     },
   {id:'stagger',     title:'Stagger',           fn:wStagger     },
   {id:'cold_psi',    title:'Cold Tire PSI',     fn:wColdPSI     },
   {id:'hot_psi',     title:'Hot Tire PSI',      fn:wHotPSI      },
-  {id:'builds',      title:'Builds (Calc)',     fn:wBuilds      },
+  {id:'builds',      title:'Builds',            fn:wBuilds      },
   {id:'chassis',     title:'Chassis Setup',     fn:wChassis     },
   {id:'cross_member',title:'Cross Member',      fn:wCrossMember },
   {id:'temps',       title:'Temps',             fn:wTemps       },
@@ -653,7 +786,6 @@ const STD=[
 
 // Default layout — all hidden (blank canvas). Positions used by resetLayout only.
 const DEF={
-  run_info:    {x:0,  y:0,  w:200,h:200,v:false,type:'run_info'    },
   stagger:     {x:210,y:0,  w:300,h:200,v:false,type:'stagger'     },
   cold_psi:    {x:520,y:0,  w:270,h:170,v:false,type:'cold_psi'    },
   hot_psi:     {x:520,y:180,w:270,h:170,v:false,type:'hot_psi'     },
@@ -718,7 +850,7 @@ function init(){
   // Clamp indices
   curSess=Math.min(curSess,sessions.length-1);
   curRun=Math.min(curRun,(curSessObj().runs.length||1)-1);
-  // Apply logo
+  // Apply topbar logo
   const logo=localStorage.getItem('lm_logo');
   if(logo) applyLogoData(logo);
   // Set default date on new session
@@ -899,6 +1031,7 @@ function autosave(){
   try{
     saveCurrentRun();
     localStorage.setItem(KEY,JSON.stringify({layout,sessions,curSess,curRun,tbxN}));
+    queueCloudSave();
   }catch(e){}
 }
 function saveAll(){autosave();toast('Saved');}
@@ -982,7 +1115,7 @@ function buildWidget(id,def,pos){
   w.innerHTML=`
     <div class="wh" data-wid="${id}">
       <span class="wt">${displayTitle}</span>
-      <button class="wbtn" onclick="openSettings('${id}')" title="Settings">&#9881;</button>
+      <button class="wbtn" onclick="openSettings('${id}')" title="Settings" style="font-size:0.69rem;letter-spacing:.5px">SET</button>
       <button class="wbtn wcls" onclick="closeW('${id}')" title="Hide">&#10005;</button>
     </div>
     <div class="${wbCls}">${def.fn(getRun())}</div>
@@ -1176,42 +1309,40 @@ function updateStagger(){
 // ═══════════════════════════════════════════════════
 //  WIDGET RENDER FUNCTIONS
 // ═══════════════════════════════════════════════════
-function wRunInfo(r){
+function wRunInfoBody(r){
   const fastest=calcFastest(r.lapTimes);
   const times=r.lapTimes||[];
   const timesHtml=times.length
     ?times.map((t,i)=>`
-      <div style="display:flex;align-items:center;gap:3px;padding:2px 0;border-bottom:1px solid var(--bd)">
-        <span style="font-size:8px;color:var(--dim);min-width:14px;font-weight:700">${i+1}</span>
-        <span style="font-size:12px;font-weight:700;flex:1;font-family:monospace;${t===fastest?'color:var(--accH)':''}">${t}</span>
-        ${t===fastest?'<span style="font-size:7px;color:var(--acc);font-weight:800;letter-spacing:.5px">BEST</span>':''}
-        <button onclick="deleteLapInline(${i})" style="background:none;border:none;color:var(--dim);font-size:10px;cursor:pointer;padding:0 2px;touch-action:manipulation;line-height:1">x</button>
+      <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--bd)">
+        <span style="font-size:0.62rem;color:var(--dim);min-width:20px;font-weight:700">${i+1}</span>
+        <span style="font-size:1rem;font-weight:700;flex:1;${t===fastest?'color:var(--accH)':''}">${t}</span>
+        ${t===fastest?'<span style="font-size:0.62rem;color:var(--acc);font-weight:800;letter-spacing:.5px">BEST</span>':''}
+        <button onclick="deleteLapInline(${i})" style="background:none;border:none;color:var(--dim);font-size:0.85rem;cursor:pointer;padding:0 4px;touch-action:manipulation;line-height:1">&#10005;</button>
       </div>`).join('')
-    :'<div style="color:var(--dim);font-size:9px;padding:3px 0">No times entered</div>';
+    :'<div style="color:var(--dim);font-size:0.85rem;padding:6px 0">No times entered</div>';
   return`
-    <div style="font-size:15px;font-weight:900;color:var(--acc);margin-bottom:4px;letter-spacing:1px">RUN ${r.n}</div>
-    <div style="background:var(--p2);border:1px solid var(--bd);border-radius:4px;padding:5px">
-      <div class="g2 mb">
-        <div>
-          <div style="font-size:8px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Lap Count</div>
-          ${sp('r_lapcount',r.lapCount||0,1,0,null,'0')}
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--inp);border:1px solid var(--bd);border-radius:4px;padding:3px 2px">
-          <div style="font-size:7px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Fastest</div>
-          <div style="font-size:13px;font-weight:900;color:var(--accH);font-family:monospace;margin-top:1px">${fastest||'--'}</div>
-        </div>
+    <div class="g2 mb" style="gap:8px">
+      <div>
+        <div style="font-size:0.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Lap Count</div>
+        ${sp('r_lapcount',r.lapCount||0,1,0,null,'0')}
       </div>
-      <div style="max-height:90px;overflow-y:auto;margin-bottom:4px;scrollbar-width:thin;scrollbar-color:var(--bd) transparent">${timesHtml}</div>
-      <div style="display:flex;gap:3px">
-        <input id="ri-lap-inp" type="text" placeholder="e.g. 14.232"
-          style="flex:1;background:var(--inp);border:1px solid var(--bd);color:var(--txt);border-radius:4px;padding:2px 5px;font-size:12px;outline:none;min-height:26px;font-family:monospace"
-          onkeydown="if(event.key==='Enter')addLapInline()"
-          onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bd)'">
-        <button class="tb red" onclick="addLapInline()" style="min-height:26px;padding:0 8px;font-size:14px;font-weight:900">+</button>
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--inp);border:1px solid var(--bd);border-radius:4px;padding:6px">
+        <div style="font-size:0.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px">Fastest</div>
+        <div style="font-size:1.31rem;font-weight:900;color:var(--accH);margin-top:2px">${fastest||'--'}</div>
       </div>
     </div>
-    <div style="margin-top:5px">${txt('Tire Set','r_ts',r.tset,'#')}</div>`;
+    <div style="max-height:240px;overflow-y:auto;margin-bottom:8px;scrollbar-width:thin;scrollbar-color:var(--bd) transparent">${timesHtml}</div>
+    <div style="display:flex;gap:5px;margin-bottom:10px">
+      <input id="ri-lap-inp" type="text" placeholder="e.g. 14.232"
+        style="flex:1;background:var(--inp);border:1px solid var(--bd);color:var(--txt);border-radius:4px;padding:4px 8px;font-size:1rem;outline:none;min-height:36px"
+        onkeydown="if(event.key==='Enter')addLapInline()"
+        onfocus="this.style.borderColor='var(--acc)'" onblur="this.style.borderColor='var(--bd)'">
+      <button class="tb red" onclick="addLapInline()" style="min-height:36px;padding:0 14px;font-size:1.31rem;font-weight:900">+</button>
+    </div>
+    ${txt('Tire Set','r_ts',r.tset,'#')}`;
 }
+function wRunInfo(r){return wRunInfoBody(r);}
 
 function wStagger(r){
   const corners=[['LF','lf'],['RF','rf'],['LR','lr'],['RR','rr']];
@@ -1234,19 +1365,19 @@ function wStagger(r){
 
 function wColdPSI(r){
   return`<div class="t2x2">
-    <div class="tc"><div class="cl">LF</div>${sp('r_clf',r.clf,0.5,0,null,'0.0')}</div>
-    <div class="tc"><div class="cl">RF</div>${sp('r_crf',r.crf,0.5,0,null,'0.0')}</div>
-    <div class="tc"><div class="cl">LR</div>${sp('r_clr',r.clr,0.5,0,null,'0.0')}</div>
-    <div class="tc"><div class="cl">RR</div>${sp('r_crr',r.crr,0.5,0,null,'0.0')}</div>
+    <div class="tc"><div class="cl">LF</div>${sp('r_clf',r.clf,0.1,0,null,'0.0')}</div>
+    <div class="tc"><div class="cl">RF</div>${sp('r_crf',r.crf,0.1,0,null,'0.0')}</div>
+    <div class="tc"><div class="cl">LR</div>${sp('r_clr',r.clr,0.1,0,null,'0.0')}</div>
+    <div class="tc"><div class="cl">RR</div>${sp('r_crr',r.crr,0.1,0,null,'0.0')}</div>
   </div>`;
 }
 
 function wHotPSI(r){
   return`<div class="t2x2">
-    <div class="tc"><div class="cl">LF</div>${sp('r_hlf',r.hlf,0.5,0,null,'0.0')}</div>
-    <div class="tc"><div class="cl">RF</div>${sp('r_hrf',r.hrf,0.5,0,null,'0.0')}</div>
-    <div class="tc"><div class="cl">LR</div>${sp('r_hlr',r.hlr,0.5,0,null,'0.0')}</div>
-    <div class="tc"><div class="cl">RR</div>${sp('r_hrr',r.hrr,0.5,0,null,'0.0')}</div>
+    <div class="tc"><div class="cl">LF</div>${sp('r_hlf',r.hlf,0.1,0,null,'0.0')}</div>
+    <div class="tc"><div class="cl">RF</div>${sp('r_hrf',r.hrf,0.1,0,null,'0.0')}</div>
+    <div class="tc"><div class="cl">LR</div>${sp('r_hlr',r.hlr,0.1,0,null,'0.0')}</div>
+    <div class="tc"><div class="cl">RR</div>${sp('r_hrr',r.hrr,0.1,0,null,'0.0')}</div>
   </div>`;
 }
 
@@ -1262,12 +1393,10 @@ function wBuilds(r){
 
 function wChassis(r){
   return`
-  <div class="g3 mb">
+  <div style="display:flex;flex-direction:column;gap:5px">
     ${spf('Bar Load (lbs)','r_barload',r.bar_load,5,0,null,'200')}
     ${spf('Brake Bias F (psi)','r_bbiasf',r.bbias_f,1,0,null,'0')}
     ${spf('Brake Bias R (psi)','r_bbiasr',r.bbias_r,1,0,null,'0')}
-  </div>
-  <div class="g2">
     ${spf('Tape Config (%)','r_tape',r.tape,5,0,100,'0')}
     ${spf('Fuel (gal)','r_fuel',r.fuel,1,0,null,'0')}
   </div>`;
@@ -1420,9 +1549,9 @@ function tboxHTML(id,r){
     <div style="font-size:9px;color:var(--dim);margin:3px 0">PSI</div>
   </div>
   <div class="sp">
-    <button class="spb" onpointerdown="startStep('tb_v_${id}',-0.5,0)" onpointerup="stopStep()" onpointercancel="stopStep()">-</button>
-    <input type="number" id="tb_v_${id}" value="${val}" step="0.5" style="font-size:22px;font-weight:900">
-    <button class="spb" onpointerdown="startStep('tb_v_${id}',0.5,0)" onpointerup="stopStep()" onpointercancel="stopStep()">+</button>
+    <button class="spb" onpointerdown="startStep('tb_v_${id}',-0.1,0)" onpointerup="stopStep()" onpointercancel="stopStep()">-</button>
+    <input type="number" id="tb_v_${id}" value="${val}" step="0.1" style="font-size:22px;font-weight:900">
+    <button class="spb" onpointerdown="startStep('tb_v_${id}',0.1,0)" onpointerup="stopStep()" onpointercancel="stopStep()">+</button>
   </div>`;
 }
 
@@ -1510,10 +1639,81 @@ function normalizeLapTime(v){
 }
 
 function refreshRunInfoWidgets(){
-  Object.keys(layout).filter(k=>layout[k].type==='run_info'&&layout[k].v).forEach(k=>{
-    const wb=document.querySelector(`[data-wid="${k}"] .wb`);
-    if(wb){wb.innerHTML=wRunInfo(getRun());hookInputs();}
-  });
+  // Also refresh modal if open
+  const modal=document.getElementById('m-runinfo');
+  if(modal&&modal.classList.contains('open')){
+    const r=getRun();
+    document.getElementById('ri-modal-title').textContent='Run '+r.n+' Info';
+    document.getElementById('ri-modal-body').innerHTML=wRunInfoBody(r);
+    hookInputs();
+  }
+}
+
+function openRunInfo(){
+  const r=getRun();
+  document.getElementById('ri-modal-title').textContent='Run '+r.n+' Info';
+  document.getElementById('ri-modal-body').innerHTML=wRunInfoBody(r);
+  hookInputs();
+  openM('m-runinfo');
+  setTimeout(()=>document.getElementById('ri-lap-inp')?.focus(),80);
+}
+
+// ═══════════════════════════════════════════════════
+//  SESSION INFO POPUP
+// ═══════════════════════════════════════════════════
+function wSessInfoBody(s){
+  const esc=v=>(v||'').toString().replace(/"/g,'&quot;');
+  return`
+    <div class="g2 mb" style="gap:8px">
+      <div class="field"><label>Session Name</label>
+        <input class="mi" id="ssi-name" type="text" value="${esc(s.name)}" style="margin:0"></div>
+      <div class="field"><label>Date</label>
+        <input class="mi" id="ssi-date" type="date" value="${esc(s.date)}" style="margin:0"></div>
+    </div>
+    <div class="g2 mb" style="gap:8px">
+      <div class="field"><label>Track</label>
+        <input class="mi" id="ssi-track" type="text" value="${esc(s.track)}" placeholder="Track name" style="margin:0"></div>
+      <div class="field"><label>Driver</label>
+        <input class="mi" id="ssi-driver" type="text" value="${esc(s.driver)}" placeholder="Driver" style="margin:0"></div>
+    </div>
+    <div class="g2 mb" style="gap:8px">
+      <div class="field"><label>Chassis #</label>
+        <input class="mi" id="ssi-chassis" type="text" value="${esc(s.chassis)}" placeholder="Chassis" style="margin:0"></div>
+      <div class="field"><label>Practice #</label>
+        <input class="mi" id="ssi-pnum" type="number" value="${esc(s.pnum)}" placeholder="#" style="margin:0"></div>
+    </div>
+    <div class="g2 mb" style="gap:8px">
+      <div class="field"><label>Air Temp (°F)</label>
+        <input class="mi" id="ssi-air" type="number" value="${esc(s.air)}" placeholder="°F" style="margin:0"></div>
+      <div class="field"><label>Track Temp (°F)</label>
+        <input class="mi" id="ssi-trk" type="number" value="${esc(s.trk)}" placeholder="°F" style="margin:0"></div>
+    </div>
+    <div class="field"><label>Practice Length</label>
+      <input class="mi" id="ssi-plen" type="text" value="${esc(s.plen)}" placeholder="e.g. 15 minutes" style="margin:0">
+    </div>`;
+}
+
+function openSessInfo(){
+  const s=curSessObj();
+  document.getElementById('ssi-modal-title').textContent=s.name||'Session Info';
+  document.getElementById('ssi-modal-body').innerHTML=wSessInfoBody(s);
+  document.getElementById('m-sessinfo').classList.add('open');
+}
+
+function saveSessInfoModal(){
+  const s=curSessObj();
+  const n=document.getElementById('ssi-name')?.value.trim();
+  if(n)s.name=n;
+  s.date=document.getElementById('ssi-date')?.value||s.date;
+  s.track=document.getElementById('ssi-track')?.value||'';
+  s.driver=document.getElementById('ssi-driver')?.value||'';
+  s.chassis=document.getElementById('ssi-chassis')?.value||'';
+  s.air=parseFloat(document.getElementById('ssi-air')?.value)||'';
+  s.trk=parseFloat(document.getElementById('ssi-trk')?.value)||'';
+  s.pnum=parseInt(document.getElementById('ssi-pnum')?.value)||s.pnum;
+  s.plen=document.getElementById('ssi-plen')?.value||'';
+  updateSessBtn();renderSessStrip();autosave();
+  closeM('m-sessinfo');toast('Session updated');
 }
 function addLapInline(){
   const inp=document.getElementById('ri-lap-inp');
@@ -1805,51 +2005,183 @@ function printPDF(){
 }
 
 // ═══════════════════════════════════════════════════
-//  LOGO
+//  LOGOS (topbar + login — independent)
 // ═══════════════════════════════════════════════════
-function uploadLogo(){document.getElementById('logo-inp').click();}
 function setLogo(e){
   const f=e.target.files[0];if(!f)return;
   const r=new FileReader();
-  r.onload=ev=>{localStorage.setItem('lm_logo',ev.target.result);applyLogoData(ev.target.result);toast('Logo updated');};
+  r.onload=ev=>{
+    localStorage.setItem('lm_logo',ev.target.result);
+    applyLogoData(ev.target.result);
+    refreshLogoZonePreviews();
+    toast('HUD logo updated');
+    queueCloudSave();
+  };
   r.readAsDataURL(f);e.target.value='';
 }
 function applyLogoData(b64){
   const img=document.getElementById('logo-img');
   const txt=document.getElementById('logo-text');
-  const hint=document.getElementById('logo-hint');
-  img.src=b64;img.style.display='block';
-  txt.style.display='none';hint.style.display='none';
+  if(img){img.src=b64;img.style.display='block';}
+  if(txt)txt.style.display='none';
+}
+function clearTopbarLogo(){
+  localStorage.removeItem('lm_logo');
+  const img=document.getElementById('logo-img');
+  const txt=document.getElementById('logo-text');
+  if(img){img.src='';img.style.display='none';}
+  if(txt)txt.style.display='';
+  refreshLogoZonePreviews();
+  toast('HUD logo cleared');
+}
+
+// Login logo (independent from topbar logo)
+function setLoginLogo(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=ev=>{
+    localStorage.setItem('lm_login_logo',ev.target.result);
+    applyLoginLogoData(ev.target.result);
+    refreshLogoZonePreviews();
+    toast('Login logo updated');
+  };
+  r.readAsDataURL(f);e.target.value='';
+}
+// Called from the login screen's own file input
+function setLoginLogoFromScreen(e){
+  setLoginLogo(e);
+}
+function applyLoginLogoData(b64){
+  const img=document.getElementById('login-logo-img');
+  const ph=document.getElementById('login-logo-placeholder');
+  const lt=document.getElementById('login-logo-text');
+  if(img){img.src=b64;img.style.display='block';}
+  if(ph)ph.style.display='none';
+  if(lt)lt.style.display='none';
+  // Shrink the placeholder border once a logo is set
+  const area=document.getElementById('login-logo-area');
+  if(area){area.style.borderStyle='solid';area.style.borderColor='var(--bd)';}
+}
+function clearLoginLogo(){
+  localStorage.removeItem('lm_login_logo');
+  const img=document.getElementById('login-logo-img');
+  const ph=document.getElementById('login-logo-placeholder');
+  const lt=document.getElementById('login-logo-text');
+  if(img){img.src='';img.style.display='none';}
+  if(ph)ph.style.display='flex';
+  if(lt)lt.style.display='';
+  const area=document.getElementById('login-logo-area');
+  if(area){area.style.borderStyle='dashed';area.style.borderColor='var(--bd)';}
+  refreshLogoZonePreviews();
+  toast('Login logo cleared');
+}
+function refreshLogoZonePreviews(){
+  // Topbar logo zone in settings
+  const tLogo=localStorage.getItem('lm_logo');
+  const tzp=document.getElementById('logo-zone-preview');
+  const tzh=document.getElementById('logo-zone-hint');
+  if(tzp&&tzh){
+    if(tLogo){tzp.src=tLogo;tzp.style.display='block';tzh.style.display='none';}
+    else{tzp.style.display='none';tzh.style.display='';}
+  }
+  // Login logo zone in settings
+  const lLogo=localStorage.getItem('lm_login_logo');
+  const lzp=document.getElementById('login-logo-zone-preview');
+  const lzh=document.getElementById('login-logo-zone-hint');
+  if(lzp&&lzh){
+    if(lLogo){lzp.src=lLogo;lzp.style.display='block';lzh.style.display='none';}
+    else{lzp.style.display='none';lzh.style.display='';}
+  }
 }
 
 // ═══════════════════════════════════════════════════
-//  EXPORT / IMPORT
+//  NAMED LAYOUTS
 // ═══════════════════════════════════════════════════
-// Save/load layout only (no session data)
-const LAYOUT_KEY='lm_layout_save';
-function saveLayoutOnly(){
-  localStorage.setItem(LAYOUT_KEY,JSON.stringify({layout,tbxN}));
-  toast('Layout saved');
+const NAMED_LAYOUTS_KEY='lm_named_layouts';
+
+function getNamedLayouts(){
+  try{return JSON.parse(localStorage.getItem(NAMED_LAYOUTS_KEY)||'[]');}catch(e){return[];}
 }
-function loadLayoutOnly(){
-  const raw=localStorage.getItem(LAYOUT_KEY);
-  if(!raw){toast('No saved layout found');return;}
-  try{
-    const d=JSON.parse(raw);
-    if(d.layout)layout=Object.assign(dc(DEF),d.layout);
-    if(d.tbxN!=null)tbxN=d.tbxN;
-    renderAll();autosave();toast('Layout restored');
-  }catch(e){toast('Could not load layout');}
+function saveNamedLayouts(arr){localStorage.setItem(NAMED_LAYOUTS_KEY,JSON.stringify(arr));}
+
+function saveNamedLayout(){
+  const inp=document.getElementById('layout-save-name');
+  const name=(inp?.value||'').trim();
+  if(!name){toast('Enter a layout name');return;}
+  const arr=getNamedLayouts();
+  // Replace if name already exists
+  const idx=arr.findIndex(l=>l.name===name);
+  const slot={name,layout:JSON.parse(JSON.stringify(layout)),tbxN,savedAt:Date.now()};
+  if(idx>=0)arr[idx]=slot;
+  else arr.unshift(slot); // newest first
+  saveNamedLayouts(arr);
+  if(inp)inp.value='';
+  renderLayoutSlots();
+  toast('Layout "'+name+'" saved');
 }
 
-function exportJSON(){
-  autosave();const s=curSessObj();
-  const blob=new Blob([JSON.stringify({sessions,curSess,layout,tbxN,exported:new Date().toISOString()},null,2)],{type:'application/json'});
+function loadNamedLayout(idx){
+  const arr=getNamedLayouts();
+  const slot=arr[idx];if(!slot)return;
+  layout=Object.assign(dc(DEF),slot.layout);
+  tbxN=slot.tbxN||0;
+  renderAll();autosave();
+  toast('Layout "'+slot.name+'" loaded');
+}
+
+function deleteNamedLayout(idx){
+  const arr=getNamedLayouts();
+  const name=arr[idx]?.name||'';
+  if(!confirm('Delete layout "'+name+'"?'))return;
+  arr.splice(idx,1);
+  saveNamedLayouts(arr);
+  renderLayoutSlots();
+  toast('Layout deleted');
+}
+
+function renderLayoutSlots(){
+  const target=document.getElementById('named-layouts-list');
+  if(!target)return;
+  const arr=getNamedLayouts();
+  if(!arr.length){
+    target.innerHTML='<div style="color:var(--dim);font-size:0.77rem;padding:4px 0 6px">No saved layouts yet</div>';
+    return;
+  }
+  target.innerHTML=arr.map((l,i)=>{
+    const d=new Date(l.savedAt);
+    const dateStr=d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    return`<div class="nl-slot">
+      <span class="nl-name">${l.name}</span>
+      <span class="nl-meta">${dateStr}</span>
+      <button class="nl-btn load" onclick="loadNamedLayout(${i})">Load</button>
+      <button class="nl-btn del" onclick="deleteNamedLayout(${i})" style="color:var(--dim)">✕</button>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════
+//  EXPORT / IMPORT (named)
+// ═══════════════════════════════════════════════════
+function exportJSONNamed(){
+  autosave();
+  const s=curSessObj();
+  const customName=(document.getElementById('export-filename')?.value||'').trim();
+  const defaultName=`lm_${(s.name||'session').replace(/\s+/g,'_')}_${s.date||new Date().toISOString().slice(0,10)}`;
+  const filename=(customName||defaultName).replace(/[^a-zA-Z0-9_\-]/g,'_')+'.json';
+  const blob=new Blob([JSON.stringify({
+    sessions,curSess,layout,tbxN,
+    exportName:customName||defaultName,
+    exported:new Date().toISOString()
+  },null,2)],{type:'application/json'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
-  a.download=`lm_${(s.track||'track').replace(/\s+/g,'_')}_${s.date||'date'}.json`;
-  a.click();URL.revokeObjectURL(a.href);toast('Exported');
+  a.download=filename;
+  a.click();URL.revokeObjectURL(a.href);
+  toast('Exported: '+filename);
 }
+// Keep old name working (PDF etc.)
+function exportJSON(){exportJSONNamed();}
+
 function importClick(){document.getElementById('imp').click();}
 function doImport(e){
   const f=e.target.files[0];if(!f)return;
@@ -1896,7 +2228,7 @@ function renderSessStrip(){
       <div class="sn">Session ${s.pnum||i+1}</div>
       <div class="sm">${s.name||'Unnamed'}</div>
       <div class="sl2">${s.track||'No track'} &middot; ${s.runs.length} run${s.runs.length!==1?'s':''}</div>
-      <button class="sge" onclick="event.stopPropagation();editSessAt(${i})" title="Edit session">&#9881;</button>
+      <button class="sge" onclick="event.stopPropagation();editSessAt(${i})" title="Edit session" style="font-size:0.54rem;letter-spacing:.3px;font-weight:800">EDT</button>
       <button class="sdel" onclick="event.stopPropagation();delSession(${i})" title="Delete session">&#10005;</button>
     </div>`).join('');
   setTimeout(()=>document.querySelector('.scard.active')?.scrollIntoView({behavior:'smooth',inline:'nearest',block:'nearest'}),50);
@@ -1960,10 +2292,27 @@ const SCHED_KEY='lm_sched';
 let clockInterval=null;
 
 function getSchedule(){
-  try{const d=JSON.parse(localStorage.getItem(SCHED_KEY)||'[]');
-    return d.sort((a,b)=>a.start.localeCompare(b.start));}catch(e){return[];}
+  try{
+    const d=JSON.parse(localStorage.getItem(SCHED_KEY)||'[]');
+    // Sort by absolute start time (startISO if present, else fall back to date+start string)
+    return d.sort((a,b)=>{
+      const ta=a.startISO?new Date(a.startISO).getTime():(a.date?new Date(a.date+'T'+a.start).getTime():0);
+      const tb=b.startISO?new Date(b.startISO).getTime():(b.date?new Date(b.date+'T'+b.start).getTime():0);
+      return ta-tb;
+    });
+  }catch(e){return[];}
 }
 function saveSchedule(arr){localStorage.setItem(SCHED_KEY,JSON.stringify(arr));}
+
+// Get a schedule item's absolute start ms, handling legacy items
+function schedStartMs(item){
+  if(item.startISO) return new Date(item.startISO).getTime();
+  // Legacy: HH:MM on today's date
+  const base=new Date();base.setHours(0,0,0,0);
+  const[sh,sm]=item.start.split(':').map(Number);
+  return base.getTime()+(sh*60+sm)*60000;
+}
+function schedEndMs(item){return schedStartMs(item)+(item.dur||30)*60000;}
 
 function startClock(){
   if(clockInterval)clearInterval(clockInterval);
@@ -1988,96 +2337,158 @@ function tickClock(){
   const sched=getSchedule();
   if(!sched.length){cdisp.style.display='none';if(csep)csep.style.display='none';return;}
 
-  // Build today's ms timestamps for each item
-  const base=new Date();base.setHours(0,0,0,0);
-  const baseMs=base.getTime();
   const nowMs=Date.now();
   let status='',cls='';
 
   for(const item of sched){
-    const[sh,sm]=item.start.split(':').map(Number);
-    const startMs=baseMs+(sh*60+sm)*60000;
-    const endMs=startMs+(item.dur||30)*60000;
+    const startMs=schedStartMs(item);
+    const endMs=schedEndMs(item);
     if(nowMs>=startMs&&nowMs<endMs){
       const rem=Math.ceil((endMs-nowMs)/1000);
       const rm=Math.floor(rem/60),rs=rem%60;
       status=item.name+' '+rm+':'+rs.toString().padStart(2,'0');
-      const msLeft=endMs-nowMs;
-      cls=msLeft<300000?'cdurgent':msLeft<600000?'cdwarn':'';
+      cls=endMs-nowMs<300000?'cdurgent':endMs-nowMs<600000?'cdwarn':'';
       break;
     }
     if(nowMs<startMs){
       const rem=Math.ceil((startMs-nowMs)/1000);
       const rh=Math.floor(rem/3600),rm=Math.floor((rem%3600)/60),rs=rem%60;
-      const ts=rh>0?rh+'h '+rm.toString().padStart(2,'0')+'m':rm.toString().padStart(2,'0')+'m '+rs.toString().padStart(2,'0')+'s';
+      const ts=rh>0?rh+'h '+rm.toString().padStart(2,'0')+'m':rm+'m '+rs.toString().padStart(2,'0')+'s';
       status=item.name+' in '+ts;
-      const msUntil=startMs-nowMs;
-      cls=msUntil<300000?'cdurgent':msUntil<600000?'cdwarn':'';
+      cls=startMs-nowMs<300000?'cdurgent':startMs-nowMs<600000?'cdwarn':'';
       break;
     }
   }
-  if(!status){const last=sched[sched.length-1];if(last){const[sh,sm]=last.start.split(':').map(Number);const endMs=baseMs+(sh*60+sm)*60000+(last.dur||30)*60000;if(nowMs>=endMs){status='Done';cls='';}}}
-  if(status){
-    cdisp.style.display='';if(csep)csep.style.display='';
-  } else {
-    cdisp.style.display='none';if(csep)csep.style.display='none';
-  }
+  if(!status){const last=sched[sched.length-1];if(schedEndMs(last)<=nowMs){status='Done';cls='';}}
+  if(status){cdisp.style.display='';if(csep)csep.style.display='';}
+  else{cdisp.style.display='none';if(csep)csep.style.display='none';}
   cdisp.textContent=status;cdisp.className=cls;
+}
+
+// ═══════════════════════════════════════════════════
+//  SCHEDULE TIMEZONE
+// ═══════════════════════════════════════════════════
+const SCHED_TZ_KEY='lm_sched_tz';
+
+function getSchedTZ(){
+  return localStorage.getItem(SCHED_TZ_KEY)||Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+function setSchedTZ(val){
+  if(val) localStorage.setItem(SCHED_TZ_KEY,val);
+  else localStorage.removeItem(SCHED_TZ_KEY);
+  renderSchedList();tickClock();
+  toast('Schedule TZ: '+(val||'Device Auto'));
+}
+
+// Convert date+time string entered in `tz` to UTC ISO
+function schedDateTimeToISO(dateStr,timeStr,tz){
+  // Strategy: treat the entered datetime as UTC, format it in target TZ,
+  // then shift to make the TZ-local result equal to the user's entered time.
+  const utcGuess=new Date(dateStr+'T'+timeStr+':00Z');
+  const inTZ=new Intl.DateTimeFormat('sv-SE',{
+    timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',
+    hour:'2-digit',minute:'2-digit',second:'2-digit'
+  }).format(utcGuess); // "YYYY-MM-DD HH:MM:SS"
+  const desired=new Date(dateStr+'T'+timeStr+':00Z');
+  const actual=new Date(inTZ.replace(' ','T')+'Z');
+  const offset=desired-actual; // ms
+  return new Date(utcGuess.getTime()+offset).toISOString();
+}
+
+// Format a UTC timestamp in a specific IANA timezone for display
+function fmtInTZ(ms,tz){
+  const d=new Date(ms);
+  const time=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true,timeZone:tz});
+  const date=d.toLocaleDateString('en-US',{month:'short',day:'numeric',weekday:'short',timeZone:tz});
+  const abbr=d.toLocaleTimeString('en-US',{timeZoneName:'short',timeZone:tz}).split(' ').pop();
+  return{time,date,abbr};
 }
 
 // ─── Schedule Modal ───
 function openM_schedule(){
   renderSchedList();
-  // Pre-fill start time with current time rounded to next 30min
-  const now=new Date();let h=now.getHours(),m=now.getMinutes();
+  // Pre-fill date to today and time to next 30-min boundary (in schedule TZ)
+  const tz=getSchedTZ();
+  const now=new Date();
+  const tzParts=now.toLocaleString('sv-SE',{timeZone:tz}).slice(0,16); // "YYYY-MM-DD HH:MM"
+  const[datePart,timePart]=tzParts.split(' ');
+  document.getElementById('si-date').value=datePart;
+  let[h,m]=timePart.split(':').map(Number);
   m=m<30?30:0;if(m===0)h=(h+1)%24;
   document.getElementById('si-start').value=h.toString().padStart(2,'0')+':'+m.toString().padStart(2,'0');
   document.getElementById('si-dur').value='30';
   document.getElementById('si-name').value='';
+  // Set TZ selector
+  const tzSel=document.getElementById('sched-tz-sel');
+  if(tzSel) tzSel.value=localStorage.getItem(SCHED_TZ_KEY)||'';
 }
 
 function renderSchedList(){
   const sched=getSchedule();
-  const now=new Date();
-  const base=new Date();base.setHours(0,0,0,0);
-  const baseMs=base.getTime();
   const nowMs=Date.now();
+  const schedTZ=getSchedTZ();
+  const deviceTZ=Intl.DateTimeFormat().resolvedOptions().timeZone;
   const target=document.getElementById('sched-list-inline')||document.getElementById('sched-list');
   if(!target)return;
-  target.innerHTML=sched.length===0
-    ?'<div style="color:var(--dim);font-size:11px;padding:8px 0">No sessions scheduled yet</div>'
-    :sched.map((item,i)=>{
-      const[sh,sm]=item.start.split(':').map(Number);
-      const startMs=baseMs+(sh*60+sm)*60000;
-      const endMs=startMs+(item.dur||30)*60000;
-      const active=nowMs>=startMs&&nowMs<endMs;
-      const isNext=!active&&nowMs<startMs&&(i===0||nowMs>=(baseMs+(sched[i-1].start.split(':').reduce((a,v,j)=>(j===0?a+parseInt(v)*60:a+parseInt(v)),0))*60000+(sched[i-1].dur||30)*60000));
-      // Format start time 12h
-      let dh=sh%12;if(dh===0)dh=12;const ampm=sh>=12?'PM':'AM';
-      const t12=dh+':'+sm.toString().padStart(2,'0')+' '+ampm;
-      return`<div class="sched-item${active?' active':isNext?' next':''}">
-        <div style="flex:1">
-          <div class="si-name">${item.name}</div>
-          <div class="si-meta">${t12} &middot; ${item.dur||30} min${active?' \u25B6 IN PROGRESS':isNext?' \u2192 UP NEXT':''}</div>
-        </div>
-        <button class="si-del" onclick="deleteSchedItem(${i})">&#10005;</button>
-      </div>`;
-    }).join('');
+
+  // Update TZ note
+  const tzNote=document.getElementById('sched-tz-note');
+  if(tzNote){
+    const savedTZ=localStorage.getItem(SCHED_TZ_KEY);
+    if(savedTZ){
+      const names={
+        'America/New_York':'Eastern','America/Chicago':'Central','America/Denver':'Mountain',
+        'America/Los_Angeles':'Pacific','America/Anchorage':'Alaska','America/Honolulu':'Hawaii'
+      };
+      tzNote.textContent='Showing times in '+(names[savedTZ]||savedTZ);
+      tzNote.style.color='var(--acc)';
+    } else {
+      tzNote.textContent='Device TZ ('+deviceTZ+')';
+      tzNote.style.color='var(--dim)';
+    }
+  }
+
+  if(!sched.length){target.innerHTML='<div style="color:var(--dim);font-size:0.85rem;padding:8px 0">No sessions scheduled yet</div>';return;}
+  const firstUpcoming=sched.findIndex(s=>schedStartMs(s)>nowMs);
+  target.innerHTML=sched.map((item,i)=>{
+    const startMs=schedStartMs(item);
+    const endMs=schedEndMs(item);
+    const active=nowMs>=startMs&&nowMs<endMs;
+    const upcoming=nowMs<startMs;
+    const done=nowMs>=endMs;
+    // Display in the item's stored TZ (or current schedTZ as fallback)
+    const displayTZ=item.tz||schedTZ;
+    const{time:t12,date:dateStr,abbr:tzAbbr}=fmtInTZ(startMs,displayTZ);
+    const statusBadge=active?' &nbsp;<span style="color:var(--grn);font-weight:800">IN PROGRESS</span>':upcoming&&i===firstUpcoming?' &nbsp;<span style="color:var(--acc);font-weight:800">UP NEXT</span>':done?' &nbsp;<span style="color:var(--dim)">DONE</span>':'';
+    return`<div class="sched-item${active?' active':upcoming&&i===firstUpcoming?' next':''}">
+      <div style="flex:1">
+        <div class="si-name">${item.name}</div>
+        <div class="si-meta">${dateStr} &middot; ${t12} ${tzAbbr} &middot; ${item.dur||30} min${statusBadge}</div>
+      </div>
+      <button class="si-del" onclick="deleteSchedItem(${i})">&#10005;</button>
+    </div>`;
+  }).join('');
 }
 
 function addSchedItem(){
   const name=document.getElementById('si-name').value.trim();
-  const start=document.getElementById('si-start').value;
+  const start=document.getElementById('si-start').value;   // HH:MM
+  const date=document.getElementById('si-date').value;     // YYYY-MM-DD
   const dur=parseInt(document.getElementById('si-dur').value)||30;
   if(!name){toast('Enter a session name');return;}
   if(!start){toast('Set a start time');return;}
+  if(!date){toast('Set a date');return;}
+  // Use the selected schedule TZ (or device TZ if not set)
+  const tz=getSchedTZ();
+  const startISO=schedDateTimeToISO(date,start,tz);
   const sched=getSchedule();
-  sched.push({id:'s'+Date.now(),name,start,dur});
+  sched.push({id:'s'+Date.now(),name,date,start,dur,startISO,tz});
   saveSchedule(sched);
   renderSchedList();
   document.getElementById('si-name').value='';
   tickClock();
-  toast(name+' added to schedule');
+  toast(name+' added to schedule ('+tz+')');
 }
 
 function deleteSchedItem(i){
@@ -2175,19 +2586,26 @@ function toggleSettingsPanel(){
 function spTab(name){
   // Activate tab button
   document.querySelectorAll('.sp-tab').forEach(b=>b.classList.remove('active'));
-  const map={schedule:'sched-tab-btn'};
-  // find button by iterating tabs
   document.querySelectorAll('.sp-tab').forEach(b=>{
-    const pane=b.getAttribute('onclick').match(/spTab\('(\w+)'\)/);
-    if(pane&&pane[1]===name) b.classList.add('active');
+    const m=b.getAttribute('onclick')?.match(/spTab\('(\w+)'\)/);
+    if(m&&m[1]===name) b.classList.add('active');
   });
   // Show correct pane
-  ['schedule','layout','color','data','display'].forEach(n=>{
+  ['schedule','files','color','display'].forEach(n=>{
     const el=document.getElementById('sp-'+n);
     if(el) el.style.display=n===name?'':'none';
   });
-  // Refresh schedule list when switching to it
+  // Tab-specific refresh
   if(name==='schedule') renderSchedList();
+  if(name==='files'){renderLayoutSlots();refreshExportFilename();}
+  if(name==='color') refreshLogoZonePreviews();
+}
+
+function refreshExportFilename(){
+  const inp=document.getElementById('export-filename');
+  if(!inp||inp.value)return;
+  const s=curSessObj();
+  inp.placeholder=`lm_${(s.name||'session').replace(/\s+/g,'_')}_${s.date||'date'} (default)`;
 }
 
 // ═══════════════════════════════════════════════════
@@ -2213,17 +2631,17 @@ function applyFontSize(px){
   if(px<=FZ_MIN){
     dec.style.color='var(--dim)'; dec.style.background='var(--inp)';
   } else if(ratio>0.5){
-    dec.style.color='var(--accH)'; dec.style.background='#3a0404';
+    dec.style.color='var(--accH)'; dec.style.background='var(--acc-tint2)';
   } else {
-    dec.style.color='var(--acc)'; dec.style.background='#2a0404';
+    dec.style.color='var(--acc)'; dec.style.background='var(--acc-tint)';
   }
   // + button: dims when at max, bright when size is small (easy to see you need to go bigger)
   if(px>=FZ_MAX){
     inc.style.color='var(--dim)'; inc.style.background='var(--inp)';
   } else if(ratio<0.5){
-    inc.style.color='var(--accH)'; inc.style.background='#3a0404';
+    inc.style.color='var(--accH)'; inc.style.background='var(--acc-tint2)';
   } else {
-    inc.style.color='var(--acc)'; inc.style.background='#2a0404';
+    inc.style.color='var(--acc)'; inc.style.background='var(--acc-tint)';
   }
   // Display value: accent when away from default, dim when at default
   disp.style.color=px===FZ_DEF?'var(--dim)':'var(--txt)';
@@ -2245,9 +2663,261 @@ function initFontSize(){
 }
 
 // ═══════════════════════════════════════════════════
+//  CLOUD SYNC (Firebase)
+//  ─────────────────────────────────────────────────
+//  HOW TO ENABLE:
+//  1. Go to https://console.firebase.google.com
+//  2. Create a project → Add a web app → copy config below
+//  3. Enable Authentication → Sign-in method → Email/Password
+//  4. Enable Firestore Database → Start in test mode
+//  5. Fill in FB_CONFIG below and reload
+// ═══════════════════════════════════════════════════
+
+const FB_CONFIG = {
+  apiKey:            "AIzaSyBxTJLzNop7tlhcis6W_VH75SnscO0GWSI",
+  authDomain:        "cdihud-8d160.firebaseapp.com",
+  projectId:         "cdihud-8d160",
+  storageBucket:     "cdihud-8d160.firebasestorage.app",
+  messagingSenderId: "780950239861",
+  appId:             "1:780950239861:web:ad05aae43a94ac0122163c",
+  measurementId:     "G-NYK49YM34F"
+};
+
+// ═══════════════════════════════════════════════════
+//  FIREBASE AUTH + FIRESTORE
+// ═══════════════════════════════════════════════════
+let fbAuth=null, fbDB=null, fbUser=null;
+let cloudSaveTimer=null, lastSyncTime=null;
+
+// ─── Sync status dot ───
+function setSyncDot(state){
+  // state: 'pending' | 'syncing' | 'synced' | 'error' | 'off'
+  const dot=document.getElementById('sync-dot');
+  if(!dot)return;
+  const colors={pending:'#f0c040',syncing:'var(--acc)',synced:'var(--grn)',error:'#ff6060',off:'var(--dim)'};
+  dot.style.background=colors[state]||colors.off;
+  dot.style.boxShadow=state==='syncing'?'0 0 6px var(--acc)':'none';
+}
+
+function updateCloudBtn(){
+  const lbl=document.getElementById('cloud-btn-label');
+  if(!lbl)return;
+  if(fbUser){
+    const name=fbUser.email.split('@')[0];
+    lbl.textContent=name.length>12?name.slice(0,12)+'…':name;
+    setSyncDot(lastSyncTime?'synced':'off');
+  } else {
+    lbl.textContent='Account';
+    setSyncDot('off');
+  }
+}
+
+// ─── Auto-save to Firestore (debounced 4 seconds) ───
+function queueCloudSave(){
+  if(!fbUser||!fbDB)return;
+  setSyncDot('pending');
+  clearTimeout(cloudSaveTimer);
+  cloudSaveTimer=setTimeout(doCloudSave,4000);
+}
+
+function doCloudSave(){
+  if(!fbUser||!fbDB)return;
+  setSyncDot('syncing');
+  const payload={
+    sessions,curSess,layout,tbxN,
+    schedule:getSchedule(),
+    schedTZ:localStorage.getItem(SCHED_TZ_KEY)||'',
+    color:localStorage.getItem('lm_color')||'',
+    fz:localStorage.getItem(FZ_KEY)||'',
+    updated:Date.now()
+  };
+  fbDB.collection('huds').doc(fbUser.uid).set(payload)
+    .then(()=>{
+      lastSyncTime=new Date();
+      setSyncDot('synced');
+      // Re-dim after 3 seconds
+      setTimeout(()=>{if(lastSyncTime)setSyncDot('synced');},3000);
+    })
+    .catch(e=>{setSyncDot('error');console.warn('Cloud save error:',e);});
+}
+
+// ─── Load from Firestore on login ───
+function loadFromCloud(){
+  return new Promise((resolve,reject)=>{
+    if(!fbUser||!fbDB){resolve(false);return;}
+    fbDB.collection('huds').doc(fbUser.uid).get()
+      .then(doc=>{
+        if(!doc.exists){resolve(false);return;}
+        const d=doc.data();
+        // Apply cloud data into localStorage so init() picks it up
+        if(d.sessions?.length){
+          localStorage.setItem(KEY,JSON.stringify({
+            sessions:d.sessions,
+            curSess:d.curSess||0,
+            curRun:0,
+            layout:d.layout||{},
+            tbxN:d.tbxN||0
+          }));
+        }
+        if(d.schedule) localStorage.setItem(SCHED_KEY,JSON.stringify(d.schedule));
+        if(d.schedTZ) localStorage.setItem(SCHED_TZ_KEY,d.schedTZ);
+        if(d.color) localStorage.setItem('lm_color',d.color);
+        if(d.fz) localStorage.setItem(FZ_KEY,String(d.fz));
+        lastSyncTime=new Date();
+        resolve(true);
+      })
+      .catch(e=>{console.warn('loadFromCloud error:',e);resolve(false);});
+  });
+}
+
+// ─── Firebase init — runs before login screen is shown ───
+function initFirebase(){
+  if(!FB_CONFIG.apiKey||typeof firebase==='undefined'){
+    // No config — skip login gate, run in local-only mode
+    showShell();init();return;
+  }
+  try{
+    if(!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+    fbAuth=firebase.auth();
+    fbDB=firebase.firestore();
+  }catch(e){
+    console.warn('Firebase init error:',e);
+    showShell();init();return;
+  }
+
+  // Watch auth state
+  fbAuth.onAuthStateChanged(user=>{
+    fbUser=user;
+    if(user){
+      // Logged in → hide login screen, load cloud data, start app
+      hideLoginScreen();
+      loadFromCloud().then(()=>{
+        showShell();
+        init();
+        updateCloudBtn();
+        toast('Welcome back, '+user.email.split('@')[0]);
+      });
+    } else {
+      // Not logged in → show login screen, hide app
+      hideShell();
+      showLoginScreen();
+      updateCloudBtn();
+    }
+  });
+}
+
+function showShell(){
+  document.getElementById('shell').style.display='flex';
+}
+function hideShell(){
+  document.getElementById('shell').style.display='none';
+}
+function showLoginScreen(){
+  const ls=document.getElementById('login-screen');
+  if(ls){ls.style.display='flex';document.getElementById('login-loading').style.display='none';}
+  // Apply login-specific logo (independent from topbar logo)
+  const loginLogoData=localStorage.getItem('lm_login_logo');
+  if(loginLogoData) applyLoginLogoData(loginLogoData);
+  // Reset login button state
+  const btn=document.getElementById('login-btn');
+  if(btn){btn.textContent='Login';btn.disabled=false;}
+  document.getElementById('login-err').textContent='';
+}
+function hideLoginScreen(){
+  const ls=document.getElementById('login-screen');
+  if(ls)ls.style.display='none';
+}
+
+// ─── Login screen actions ───
+function doLogin(){
+  const email=document.getElementById('login-email')?.value.trim();
+  const pass=document.getElementById('login-pass')?.value;
+  const err=document.getElementById('login-err');
+  const btn=document.getElementById('login-btn');
+  if(!email||!pass){if(err)err.textContent='Enter your email and password';return;}
+  if(err)err.textContent='';
+  if(btn){btn.textContent='Logging in…';btn.disabled=true;}
+  document.getElementById('login-loading').style.display='block';
+  fbAuth.signInWithEmailAndPassword(email,pass)
+    .catch(e=>{
+      if(err)err.textContent=friendlyAuthError(e.code);
+      if(btn){btn.textContent='Login';btn.disabled=false;}
+      document.getElementById('login-loading').style.display='none';
+    });
+}
+
+function doCreateAccount(){
+  const email=document.getElementById('login-email')?.value.trim();
+  const pass=document.getElementById('login-pass')?.value;
+  const err=document.getElementById('login-err');
+  const btn=document.getElementById('login-btn');
+  if(!email){if(err)err.textContent='Enter an email address';return;}
+  if(!pass||pass.length<6){if(err)err.textContent='Password must be at least 6 characters';return;}
+  if(err)err.textContent='';
+  if(btn){btn.textContent='Creating…';btn.disabled=true;}
+  document.getElementById('login-loading').style.display='block';
+  fbAuth.createUserWithEmailAndPassword(email,pass)
+    .catch(e=>{
+      if(err)err.textContent=friendlyAuthError(e.code);
+      if(btn){btn.textContent='Login';btn.disabled=false;}
+      document.getElementById('login-loading').style.display='none';
+    });
+}
+
+function friendlyAuthError(code){
+  const map={
+    'auth/user-not-found':'No account found with that email.',
+    'auth/wrong-password':'Incorrect password.',
+    'auth/invalid-email':'Invalid email address.',
+    'auth/email-already-in-use':'An account already exists for that email.',
+    'auth/too-many-requests':'Too many attempts. Please wait a moment.',
+    'auth/network-request-failed':'Network error. Check your connection.',
+    'auth/invalid-credential':'Email or password is incorrect.',
+    'auth/configuration-not-found':'Firebase Authentication not enabled. Enable Email/Password in the Firebase console.'
+  };
+  return map[code]||'Error: '+code;
+}
+
+// ─── Account modal (shown when already logged in) ───
+function openCloudModal(){
+  if(!fbUser){return;} // shouldn't happen but guard
+  const body=document.getElementById('cloud-body');
+  const btns=document.getElementById('cloud-btns');
+  document.getElementById('cloud-title').textContent='Account';
+  const syncStr=lastSyncTime?'Last synced '+lastSyncTime.toLocaleTimeString():'Not yet synced this session';
+  body.innerHTML=`
+    <div style="background:var(--p2);border:1px solid var(--bd);border-radius:5px;padding:10px 12px;margin-bottom:10px">
+      <div style="font-size:0.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Logged in as</div>
+      <div style="font-size:1rem;font-weight:700;color:var(--grn)">${fbUser.email}</div>
+    </div>
+    <div style="background:var(--p2);border:1px solid var(--bd);border-radius:5px;padding:10px 12px;margin-bottom:10px">
+      <div style="font-size:0.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Sync Status</div>
+      <div style="font-size:0.85rem;font-weight:700;color:var(--txt)">${syncStr}</div>
+      <div style="font-size:0.69rem;color:var(--dim);margin-top:3px">Data saves automatically after every change</div>
+    </div>`;
+  btns.innerHTML=`
+    <button class="tb red" onclick="doCloudSave();closeM('m-cloud');toast('Saving…')">Sync Now</button>
+    <button class="tb" style="color:#ff6060;margin-left:auto" onclick="doLogout()">Logout</button>
+    <button class="tb" onclick="closeM('m-cloud')">Close</button>`;
+  document.getElementById('m-cloud').classList.add('open');
+}
+
+function doLogout(){
+  if(!confirm('Log out? Your data is saved to the cloud.'))return;
+  clearTimeout(cloudSaveTimer);
+  fbAuth.signOut();
+  closeM('m-cloud');
+}
+
+// ═══════════════════════════════════════════════════
 //  START
 // ═══════════════════════════════════════════════════
-window.addEventListener('DOMContentLoaded',init);
+window.addEventListener('DOMContentLoaded',()=>{
+  // Always show login screen while Firebase resolves auth state
+  showLoginScreen();
+  initFirebase();
+});
 </script>
+
 </body>
 </html>
