@@ -65,11 +65,13 @@ input,textarea,button,select{font-family:inherit}
 #countdown-display.cdwarn{color:#f0c040}
 #countdown-display.cdurgent{color:#ff4444}
 
-/* SETTINGS PANEL */
-#settings-panel{background:#0d0d0d;border-bottom:2px solid var(--acc);
-  max-height:0;overflow:hidden;transition:max-height .35s ease,border-color .25s;flex-shrink:0}
-#settings-panel.open{max-height:min(380px,48vh)}
-#sp-inner{padding:8px 12px 10px;overflow-y:auto;max-height:inherit}
+/* FILE MANAGER */
+.fm-folder{background:none;border:1px solid transparent;color:var(--dim);
+  font-size:0.77rem;font-weight:700;padding:7px 9px;cursor:pointer;
+  border-radius:4px;touch-action:manipulation;font-family:inherit;
+  letter-spacing:.3px;text-align:left;width:100%;transition:all .15s;line-height:1.3}
+.fm-folder:hover{color:var(--txt);background:rgba(255,255,255,.05)}
+.fm-folder.active{color:var(--acc);background:var(--acc-faint);border-color:var(--acc-faint2)}
 /* Named layout slots */
 .nl-slot{display:flex;align-items:center;gap:6px;padding:5px 8px;background:var(--inp);border:1px solid var(--bd);border-radius:4px;margin-bottom:4px}
 .nl-name{flex:1;font-size:0.85rem;font-weight:700;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -94,6 +96,9 @@ input,textarea,button,select{font-family:inherit}
 @keyframes fadeIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 .sp-row{display:flex;align-items:center}
 #settings-tab-btn.active-panel{color:var(--acc);border-color:var(--acc);background:var(--acc-faint)}
+/* Popup modal overrides for wide modals */
+.mbox.fm{width:min(600px,96vw);height:min(540px,88vh);display:flex;flex-direction:column;padding:0;overflow:hidden;max-width:none;border-radius:8px}
+.mbox.sp{width:min(580px,96vw);max-height:min(540px,88vh);display:flex;flex-direction:column;padding:0;overflow:hidden;max-width:none;border-radius:8px}
 
 /* SESSION STRIP */
 #sess-strip{background:#060606;border-bottom:1px solid var(--bd);display:flex;
@@ -459,16 +464,16 @@ select.mi{cursor:pointer}
   <div id="clock-area">
     <div id="live-clock">--:--:--</div>
     <div id="clock-sep" style="display:none">/</div>
-    <div id="countdown-display" onclick="openSettingsPanel();setTimeout(()=>document.getElementById('sched-tab-btn').click(),80)" title="Open schedule" style="display:none"></div>
+    <div id="countdown-display" onclick="openSettingsPanel()" title="Open schedule" style="display:none"></div>
   </div>
   <div class="gap"></div>
   <span class="ebadge" id="ebadge">EDITING</span>
   <button class="tb" id="ebtn" onclick="toggleEdit()">Edit Layout</button>
   <button class="tb" onclick="openPicker()">+ Widget</button>
-  <button class="tb" onclick="printPDF()">PDF</button>
+  <button class="tb" onclick="openFileManager('pdf')" title="Export PDF">PDF</button>
   <button class="tb" onclick="toggleFullscreen()" title="Fullscreen" id="fsbtn" style="font-size:13px;padding:2px 6px">&#x26F6;</button>
   <button class="tb" onclick="confirmClearAll()" title="Clear All Session Data" style="color:#ff6060;border-color:#552020">Clear Data</button>
-  <button class="tb red" onclick="saveAll()">Save</button>
+  <button class="tb" onclick="openFileManager('layouts')" title="Files &amp; Layouts" style="padding:4px 9px">📁 Files</button>
   <button class="tb" id="cloud-btn" onclick="openCloudModal()" title="Account / Sync" style="display:flex;align-items:center;gap:5px;padding:4px 9px">
     <span id="sync-dot" style="width:7px;height:7px;border-radius:50%;background:var(--dim);flex-shrink:0;transition:background .3s"></span>
     <span id="cloud-btn-label">Account</span>
@@ -477,106 +482,144 @@ select.mi{cursor:pointer}
   <input type="file" id="imp" accept=".json" style="display:none" onchange="doImport(event)">
 </div>
 
-<!-- SETTINGS PANEL (slides down under topbar) -->
-<div id="settings-panel">
-  <div id="sp-inner">
-    <!-- Tab buttons -->
-    <div id="sp-tabs">
-      <button class="sp-tab active" id="sched-tab-btn" onclick="spTab('schedule')">Schedule</button>
-      <button class="sp-tab" onclick="spTab('files')">Files</button>
-      <button class="sp-tab" onclick="spTab('color')">Color</button>
-      <button class="sp-tab" onclick="spTab('display')">Display</button>
-    </div>
-    <!-- Schedule tab -->
-    <div class="sp-pane" id="sp-schedule">
-      <div id="sched-list-inline"></div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-        <span style="font-size:0.62rem;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;flex-shrink:0">Schedule TZ</span>
-        <select class="mi" id="sched-tz-sel" style="flex:1;min-width:140px;margin:0;font-size:0.77rem" onchange="setSchedTZ(this.value)">
-          <option value="">Device (Auto)</option>
-          <option value="America/New_York">Eastern (ET)</option>
-          <option value="America/Chicago">Central (CT)</option>
-          <option value="America/Denver">Mountain (MT)</option>
-          <option value="America/Los_Angeles">Pacific (PT)</option>
-          <option value="America/Anchorage">Alaska (AKT)</option>
-          <option value="America/Honolulu">Hawaii (HT)</option>
-        </select>
-        <span id="sched-tz-note" style="font-size:0.62rem;color:var(--dim);letter-spacing:.3px;flex:1;min-width:100px"></span>
+<!-- FILE MANAGER MODAL -->
+<div class="modal" id="m-files">
+  <div class="mbox fm">
+    <div class="mt" style="padding:12px 16px;border-bottom:1px solid var(--bd);flex-shrink:0;border-radius:8px 8px 0 0;font-size:1rem">📁 Files</div>
+    <div style="display:flex;flex:1;min-height:0;overflow:hidden">
+      <!-- Folder sidebar -->
+      <div style="width:130px;flex-shrink:0;border-right:1px solid var(--bd);padding:8px 6px;display:flex;flex-direction:column;gap:3px;background:#080808;overflow-y:auto">
+        <button class="fm-folder active" id="fm-f-layouts" onclick="fmOpen('layouts')">📁 Layouts</button>
+        <button class="fm-folder" id="fm-f-data" onclick="fmOpen('data')">📁 Session Data</button>
+        <button class="fm-folder" id="fm-f-pdf" onclick="fmOpen('pdf')">🖨 PDF Export</button>
       </div>
-      <div class="sp-row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
-        <div class="field" style="flex:2;min-width:120px"><label>Session Name</label><input class="mi" id="si-name" type="text" placeholder="Practice 1" style="margin-bottom:0"></div>
-        <div class="field" style="flex:1;min-width:110px"><label>Date</label><input class="mi" id="si-date" type="date" style="margin-bottom:0"></div>
-        <div class="field" style="flex:1;min-width:90px"><label>Start Time</label><input class="mi" id="si-start" type="time" style="margin-bottom:0"></div>
-        <div class="field" style="flex:1;min-width:80px"><label>Duration (min)</label><input class="mi" id="si-dur" type="number" placeholder="30" min="1" style="margin-bottom:0"></div>
-        <button class="tb red" style="min-height:34px;white-space:nowrap;flex-shrink:0" onclick="addSchedItem()">+ Add</button>
-        <button class="tb" style="min-height:34px;color:#ff6060;flex-shrink:0" onclick="clearSchedule()">Clear All</button>
-      </div>
-    </div>
-
-    <!-- Files tab (Layouts + Data, separate) -->
-    <div class="sp-pane" id="sp-files" style="display:none">
-
-      <!-- ── LAYOUTS ── -->
-      <div style="font-size:0.62rem;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;border-bottom:1px solid var(--bd);padding-bottom:3px">Layouts</div>
-      <div id="named-layouts-list" style="margin-bottom:6px"></div>
-      <div style="display:flex;gap:6px;align-items:center">
-        <input class="mi" id="layout-save-name" type="text" placeholder="Layout name (e.g. Bristol Quali)" style="flex:1;margin:0;font-size:0.77rem">
-        <button class="tb red" style="flex-shrink:0;min-height:30px;font-size:0.77rem;padding:4px 10px" onclick="saveNamedLayout()">Save Layout</button>
-      </div>
-
-      <!-- ── DATA ── -->
-      <div style="font-size:0.62rem;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin:10px 0 5px;border-bottom:1px solid var(--bd);padding-bottom:3px">Data</div>
-      <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
-        <input class="mi" id="export-filename" type="text" placeholder="Export filename (optional)" style="flex:1;min-width:150px;margin:0;font-size:0.77rem">
-        <button class="tb" style="flex-shrink:0;min-height:30px;font-size:0.77rem;padding:4px 10px" onclick="exportJSONNamed()">Export JSON</button>
-        <button class="tb" style="flex-shrink:0;min-height:30px;font-size:0.77rem;padding:4px 10px" onclick="importClick()">Import JSON</button>
-      </div>
-    </div>
-
-    <!-- Color tab -->
-    <div class="sp-pane" id="sp-color" style="display:none">
-      <!-- Accent color -->
-      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
-        <div class="swatch-row" id="swatches" style="flex:1;margin:0"></div>
-        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-          <input type="color" id="color-pick" style="width:40px;height:32px;border:1px solid var(--bd);border-radius:4px;background:none;cursor:pointer;padding:2px">
-          <span id="color-hex" style="font-size:0.77rem;font-weight:700;color:var(--txt)"></span>
-          <button class="tb red" style="padding:4px 10px;min-height:30px;font-size:0.77rem" onclick="applyCustomColor()">Apply</button>
-        </div>
-      </div>
-      <!-- Logos -->
-      <div style="font-size:0.62rem;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;border-top:1px solid var(--bd);padding-top:7px">Logos</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div>
-          <div style="font-size:0.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;font-weight:700">HUD Logo (top bar)</div>
-          <div class="logo-upload-zone" onclick="document.getElementById('logo-inp').click()" id="topbar-logo-zone">
-            <img id="logo-zone-preview" style="display:none">
-            <span id="logo-zone-hint">+ Upload Logo</span>
+      <!-- Content panel -->
+      <div style="flex:1;overflow-y:auto;padding:12px;min-width:0">
+        <!-- Layouts pane -->
+        <div id="fm-pane-layouts">
+          <div style="font-size:0.62rem;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;border-bottom:1px solid var(--bd);padding-bottom:4px">Saved Layouts</div>
+          <div id="fm-layouts-list" style="margin-bottom:12px"></div>
+          <div style="border-top:1px solid var(--bd);padding-top:10px">
+            <div style="font-size:0.62rem;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Save Current Layout</div>
+            <div style="display:flex;gap:6px;align-items:center">
+              <input class="mi" id="fm-layout-name" type="text" placeholder="Layout name (e.g. Bristol Quali)" style="flex:1;margin:0;font-size:0.77rem">
+              <button class="tb red" style="flex-shrink:0;min-height:30px;font-size:0.77rem;padding:4px 10px" onclick="saveNamedLayout()">Save</button>
+            </div>
           </div>
-          <button class="tb" style="width:100%;margin-top:4px;font-size:0.69rem;min-height:26px;color:#ff6060" onclick="clearTopbarLogo()">Clear</button>
         </div>
-        <div>
-          <div style="font-size:0.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;font-weight:700">Login Screen Logo</div>
-          <div class="logo-upload-zone" onclick="document.getElementById('login-logo-inp').click()" id="login-logo-zone">
-            <img id="login-logo-zone-preview" style="display:none">
-            <span id="login-logo-zone-hint">+ Upload Logo</span>
+        <!-- Session Data pane -->
+        <div id="fm-pane-data" style="display:none">
+          <div style="font-size:0.62rem;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;border-bottom:1px solid var(--bd);padding-bottom:4px">Session Data</div>
+          <div style="margin-bottom:14px">
+            <div style="font-size:0.62rem;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Export Session</div>
+            <input class="mi" id="fm-export-filename" type="text" placeholder="Filename (optional)" style="margin-bottom:8px;font-size:0.77rem">
+            <button class="tb red" style="width:100%;min-height:34px;font-size:0.85rem" onclick="exportJSONNamed()">⬇ Export JSON</button>
           </div>
-          <button class="tb" style="width:100%;margin-top:4px;font-size:0.69rem;min-height:26px;color:#ff6060" onclick="clearLoginLogo()">Clear</button>
+          <div style="border-top:1px solid var(--bd);padding-top:12px">
+            <div style="font-size:0.62rem;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">Import Session</div>
+            <div style="font-size:0.62rem;color:var(--dim);margin-bottom:8px;line-height:1.5">Import a previously exported JSON file to restore session data.</div>
+            <button class="tb" style="width:100%;min-height:34px;font-size:0.85rem" onclick="importClick()">⬆ Import JSON</button>
+          </div>
+        </div>
+        <!-- PDF pane -->
+        <div id="fm-pane-pdf" style="display:none">
+          <div style="font-size:0.62rem;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;border-bottom:1px solid var(--bd);padding-bottom:4px">PDF Export</div>
+          <div style="font-size:0.62rem;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">PDF Filename</div>
+          <input class="mi" id="fm-pdf-filename" type="text" placeholder="Filename (optional — default: session + date)" style="margin-bottom:12px;font-size:0.77rem">
+          <button class="tb red" style="width:100%;min-height:38px;font-size:0.92rem;letter-spacing:.5px" onclick="printPDFNamed()">🖨 Export PDF</button>
+          <div style="font-size:0.62rem;color:var(--dim);margin-top:8px;line-height:1.4">Default filename uses session name and date.</div>
         </div>
       </div>
-      <input type="file" id="login-logo-inp" accept="image/*" style="display:none" onchange="setLoginLogo(event)">
     </div>
-    <!-- Display tab -->
-    <div class="sp-pane" id="sp-display" style="display:none">
-      <div class="sp-row" style="gap:8px;align-items:center">
-        <span style="font-size:0.85rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;flex-shrink:0">Font Size</span>
-        <div style="display:flex;align-items:stretch;border:1px solid var(--bd);border-radius:4px;overflow:hidden;background:var(--inp)">
-          <button id="fz-dec" onclick="adjustFontSize(-1)" style="background:var(--acc-tint);border:none;color:var(--acc);font-size:1.31rem;font-weight:700;min-width:34px;min-height:32px;cursor:pointer;touch-action:manipulation;line-height:1;transition:color .15s,background .15s">−</button>
-          <span id="fz-display" style="font-size:0.92rem;font-weight:800;min-width:44px;text-align:center;color:var(--txt);display:flex;align-items:center;justify-content:center;border-left:1px solid var(--bd);border-right:1px solid var(--bd);padding:0 4px;transition:color .15s">13px</span>
-          <button id="fz-inc" onclick="adjustFontSize(1)" style="background:var(--acc-tint);border:none;color:var(--acc);font-size:1.31rem;font-weight:700;min-width:34px;min-height:32px;cursor:pointer;touch-action:manipulation;line-height:1;transition:color .15s,background .15s">+</button>
-        </div>
-        <button class="tb" onclick="resetFontSize()" style="font-size:0.85rem;color:var(--dim)">Reset</button>
+    <div class="mbtns" style="border-top:1px solid var(--bd);padding:8px 12px;flex-shrink:0">
+      <button class="tb" onclick="closeM('m-files')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- SETTINGS POPUP MODAL -->
+<div class="modal" id="m-settings-popup">
+  <div class="mbox sp">
+    <div class="mt" style="padding:12px 16px;border-bottom:1px solid var(--bd);flex-shrink:0;border-radius:8px 8px 0 0;font-size:1rem">⚙ Settings</div>
+    <div style="flex:1;overflow-y:auto;min-height:0">
+      <div id="sp-tabs" style="display:flex;gap:4px;padding:8px 12px 0;border-bottom:1px solid var(--bd);padding-bottom:7px;flex-wrap:wrap">
+        <button class="sp-tab active" id="sched-tab-btn" onclick="spTab('schedule')">Schedule</button>
+        <button class="sp-tab" onclick="spTab('color')">Color</button>
+        <button class="sp-tab" onclick="spTab('display')">Display</button>
       </div>
+      <div style="padding:10px 12px 14px">
+        <!-- Schedule tab -->
+        <div class="sp-pane" id="sp-schedule">
+          <div id="sched-list-inline"></div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+            <span style="font-size:0.62rem;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;flex-shrink:0">Schedule TZ</span>
+            <select class="mi" id="sched-tz-sel" style="flex:1;min-width:140px;margin:0;font-size:0.77rem" onchange="setSchedTZ(this.value)">
+              <option value="">Device (Auto)</option>
+              <option value="America/New_York">Eastern (ET)</option>
+              <option value="America/Chicago">Central (CT)</option>
+              <option value="America/Denver">Mountain (MT)</option>
+              <option value="America/Los_Angeles">Pacific (PT)</option>
+              <option value="America/Anchorage">Alaska (AKT)</option>
+              <option value="America/Honolulu">Hawaii (HT)</option>
+            </select>
+            <span id="sched-tz-note" style="font-size:0.62rem;color:var(--dim);letter-spacing:.3px;flex:1;min-width:100px"></span>
+          </div>
+          <div class="sp-row" style="gap:8px;flex-wrap:wrap;align-items:flex-end">
+            <div class="field" style="flex:2;min-width:120px"><label>Session Name</label><input class="mi" id="si-name" type="text" placeholder="Practice 1" style="margin-bottom:0"></div>
+            <div class="field" style="flex:1;min-width:110px"><label>Date</label><input class="mi" id="si-date" type="date" style="margin-bottom:0"></div>
+            <div class="field" style="flex:1;min-width:90px"><label>Start Time</label><input class="mi" id="si-start" type="time" style="margin-bottom:0"></div>
+            <div class="field" style="flex:1;min-width:80px"><label>Duration (min)</label><input class="mi" id="si-dur" type="number" placeholder="30" min="1" style="margin-bottom:0"></div>
+            <button class="tb red" style="min-height:34px;white-space:nowrap;flex-shrink:0" onclick="addSchedItem()">+ Add</button>
+            <button class="tb" style="min-height:34px;color:#ff6060;flex-shrink:0" onclick="clearSchedule()">Clear All</button>
+          </div>
+        </div>
+        <!-- Color tab -->
+        <div class="sp-pane" id="sp-color" style="display:none">
+          <div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+            <div class="swatch-row" id="swatches" style="flex:1;margin:0"></div>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+              <input type="color" id="color-pick" style="width:40px;height:32px;border:1px solid var(--bd);border-radius:4px;background:none;cursor:pointer;padding:2px">
+              <span id="color-hex" style="font-size:0.77rem;font-weight:700;color:var(--txt)"></span>
+              <button class="tb red" style="padding:4px 10px;min-height:30px;font-size:0.77rem" onclick="applyCustomColor()">Apply</button>
+            </div>
+          </div>
+          <div style="font-size:0.62rem;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;border-top:1px solid var(--bd);padding-top:7px">Logos</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div>
+              <div style="font-size:0.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;font-weight:700">HUD Logo (top bar)</div>
+              <div class="logo-upload-zone" onclick="document.getElementById('logo-inp').click()" id="topbar-logo-zone">
+                <img id="logo-zone-preview" style="display:none">
+                <span id="logo-zone-hint">+ Upload Logo</span>
+              </div>
+              <button class="tb" style="width:100%;margin-top:4px;font-size:0.69rem;min-height:26px;color:#ff6060" onclick="clearTopbarLogo()">Clear</button>
+            </div>
+            <div>
+              <div style="font-size:0.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;font-weight:700">Login Screen Logo</div>
+              <div class="logo-upload-zone" onclick="document.getElementById('login-logo-inp').click()" id="login-logo-zone">
+                <img id="login-logo-zone-preview" style="display:none">
+                <span id="login-logo-zone-hint">+ Upload Logo</span>
+              </div>
+              <button class="tb" style="width:100%;margin-top:4px;font-size:0.69rem;min-height:26px;color:#ff6060" onclick="clearLoginLogo()">Clear</button>
+            </div>
+          </div>
+          <input type="file" id="login-logo-inp" accept="image/*" style="display:none" onchange="setLoginLogo(event)">
+        </div>
+        <!-- Display tab -->
+        <div class="sp-pane" id="sp-display" style="display:none">
+          <div class="sp-row" style="gap:8px;align-items:center">
+            <span style="font-size:0.85rem;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;flex-shrink:0">Font Size</span>
+            <div style="display:flex;align-items:stretch;border:1px solid var(--bd);border-radius:4px;overflow:hidden;background:var(--inp)">
+              <button id="fz-dec" onclick="adjustFontSize(-1)" style="background:var(--acc-tint);border:none;color:var(--acc);font-size:1.31rem;font-weight:700;min-width:34px;min-height:32px;cursor:pointer;touch-action:manipulation;line-height:1;transition:color .15s,background .15s">−</button>
+              <span id="fz-display" style="font-size:0.92rem;font-weight:800;min-width:44px;text-align:center;color:var(--txt);display:flex;align-items:center;justify-content:center;border-left:1px solid var(--bd);border-right:1px solid var(--bd);padding:0 4px;transition:color .15s">13px</span>
+              <button id="fz-inc" onclick="adjustFontSize(1)" style="background:var(--acc-tint);border:none;color:var(--acc);font-size:1.31rem;font-weight:700;min-width:34px;min-height:32px;cursor:pointer;touch-action:manipulation;line-height:1;transition:color .15s,background .15s">+</button>
+            </div>
+            <button class="tb" onclick="resetFontSize()" style="font-size:0.85rem;color:var(--dim)">Reset</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="mbtns" style="border-top:1px solid var(--bd);padding:8px 12px;flex-shrink:0">
+      <button class="tb" onclick="closeM('m-settings-popup')">Close</button>
     </div>
   </div>
 </div>
@@ -698,7 +741,7 @@ select.mi{cursor:pointer}
   </div>
 </div>
 
-<!-- m-color stub (redirected to settings panel) -->
+<!-- m-color stub (redirected to settings popup) -->
 <div class="modal" id="m-color" style="display:none!important"></div>
 
 <!-- Run Info Modal -->
@@ -1868,7 +1911,7 @@ function clearRuns(){
 // ═══════════════════════════════════════════════════
 //  PDF EXPORT
 // ═══════════════════════════════════════════════════
-function printPDF(){
+function printPDF(pdfFilename){
   autosave();const s=curSessObj();const runs=s.runs;
   // Stagger calc helper for PDF
   const stagF=r=>{const d=r.circ_rf-r.circ_lf;return(d>=0?'+':'')+toFrac(Math.abs(d))+(d<0?' (-)':'');};
@@ -2001,7 +2044,12 @@ function printPDF(){
       ${stRows.map(([l,vals])=>`<tr><td class="rh">${l}</td>${vals.map(v=>`<td>${v}</td>`).join('')}</tr>`).join('')}
     </tbody></table>
     ${notes?`<div class="psect">Lap Times &amp; Notes</div>${notes}`:''}`;
-  setTimeout(()=>window.print(),80);
+  // Set document title for browser's print-to-PDF filename suggestion
+  const defaultPDFName=(s.name||'session').replace(/\s+/g,'_')+'_'+(s.date||new Date().toISOString().slice(0,10));
+  const usedName=(pdfFilename||defaultPDFName).replace(/[^a-zA-Z0-9_\-]/g,'_');
+  const prevTitle=document.title;
+  document.title=usedName;
+  setTimeout(()=>{window.print();setTimeout(()=>document.title=prevTitle,500);},80);
 }
 
 // ═══════════════════════════════════════════════════
@@ -2105,7 +2153,7 @@ function getNamedLayouts(){
 function saveNamedLayouts(arr){localStorage.setItem(NAMED_LAYOUTS_KEY,JSON.stringify(arr));}
 
 function saveNamedLayout(){
-  const inp=document.getElementById('layout-save-name');
+  const inp=document.getElementById('fm-layout-name');
   const name=(inp?.value||'').trim();
   if(!name){toast('Enter a layout name');return;}
   const arr=getNamedLayouts();
@@ -2117,6 +2165,7 @@ function saveNamedLayout(){
   saveNamedLayouts(arr);
   if(inp)inp.value='';
   renderLayoutSlots();
+  queueCloudSave();
   toast('Layout "'+name+'" saved');
 }
 
@@ -2136,11 +2185,12 @@ function deleteNamedLayout(idx){
   arr.splice(idx,1);
   saveNamedLayouts(arr);
   renderLayoutSlots();
+  queueCloudSave();
   toast('Layout deleted');
 }
 
 function renderLayoutSlots(){
-  const target=document.getElementById('named-layouts-list');
+  const target=document.getElementById('fm-layouts-list');
   if(!target)return;
   const arr=getNamedLayouts();
   if(!arr.length){
@@ -2165,7 +2215,7 @@ function renderLayoutSlots(){
 function exportJSONNamed(){
   autosave();
   const s=curSessObj();
-  const customName=(document.getElementById('export-filename')?.value||'').trim();
+  const customName=(document.getElementById('fm-export-filename')?.value||'').trim();
   const defaultName=`lm_${(s.name||'session').replace(/\s+/g,'_')}_${s.date||new Date().toISOString().slice(0,10)}`;
   const filename=(customName||defaultName).replace(/[^a-zA-Z0-9_\-]/g,'_')+'.json';
   const blob=new Blob([JSON.stringify({
@@ -2204,13 +2254,21 @@ function doImport(e){
 function openM(id){
   if(id==='m-sess')openSessModal();
   else if(id==='m-sess-edit')openEditSession();
-  else if(id==='m-schedule'){openSettingsPanel();spTab('schedule');}
-  else if(id==='m-color'){openSettingsPanel();spTab('color');}
+  else if(id==='m-schedule')openSettingsPanel('schedule');
+  else if(id==='m-color')openSettingsPanel('color');
   else document.getElementById(id).classList.add('open');
 }
-function closeM(id){document.getElementById(id).classList.remove('open');}
+function closeM(id){
+  document.getElementById(id).classList.remove('open');
+  if(id==='m-settings-popup'){settingsPanelOpen=false;document.getElementById('settings-tab-btn').classList.remove('active-panel');}
+}
 document.addEventListener('click',e=>{
-  document.querySelectorAll('.modal.open').forEach(m=>{if(e.target===m)m.classList.remove('open');});
+  document.querySelectorAll('.modal.open').forEach(m=>{
+    if(e.target===m){
+      m.classList.remove('open');
+      if(m.id==='m-settings-popup'){settingsPanelOpen=false;document.getElementById('settings-tab-btn').classList.remove('active-panel');}
+    }
+  });
 });
 let tt;
 function toast(msg){
@@ -2561,51 +2619,82 @@ function initColorPicker(){
 }
 
 // ═══════════════════════════════════════════════════
-//  SETTINGS PANEL
+//  SETTINGS POPUP
 // ═══════════════════════════════════════════════════
 let settingsPanelOpen=false;
 
-function openSettingsPanel(){
+function openSettingsPanel(tabName){
   settingsPanelOpen=true;
-  document.getElementById('settings-panel').classList.add('open');
+  document.getElementById('m-settings-popup').classList.add('open');
   document.getElementById('settings-tab-btn').classList.add('active-panel');
-  openM_schedule(); // pre-fill schedule inputs
+  spTab(tabName||'schedule');
 }
 
 function closeSettingsPanel(){
   settingsPanelOpen=false;
-  document.getElementById('settings-panel').classList.remove('open');
+  document.getElementById('m-settings-popup').classList.remove('open');
   document.getElementById('settings-tab-btn').classList.remove('active-panel');
 }
 
 function toggleSettingsPanel(){
-  if(settingsPanelOpen) closeSettingsPanel();
+  if(document.getElementById('m-settings-popup').classList.contains('open'))closeSettingsPanel();
   else openSettingsPanel();
 }
 
 function spTab(name){
-  // Activate tab button
   document.querySelectorAll('.sp-tab').forEach(b=>b.classList.remove('active'));
   document.querySelectorAll('.sp-tab').forEach(b=>{
     const m=b.getAttribute('onclick')?.match(/spTab\('(\w+)'\)/);
     if(m&&m[1]===name) b.classList.add('active');
   });
-  // Show correct pane
-  ['schedule','files','color','display'].forEach(n=>{
+  ['schedule','color','display'].forEach(n=>{
     const el=document.getElementById('sp-'+n);
     if(el) el.style.display=n===name?'':'none';
   });
-  // Tab-specific refresh
   if(name==='schedule') renderSchedList();
-  if(name==='files'){renderLayoutSlots();refreshExportFilename();}
   if(name==='color') refreshLogoZonePreviews();
 }
 
+// ═══════════════════════════════════════════════════
+//  FILE MANAGER
+// ═══════════════════════════════════════════════════
+function openFileManager(folder){
+  folder=folder||'layouts';
+  document.getElementById('m-files').classList.add('open');
+  fmOpen(folder);
+}
+
+function fmOpen(folder){
+  ['layouts','data','pdf'].forEach(f=>{
+    document.getElementById('fm-f-'+f)?.classList.remove('active');
+    const p=document.getElementById('fm-pane-'+f);
+    if(p) p.style.display=f===folder?'':'none';
+  });
+  document.getElementById('fm-f-'+folder)?.classList.add('active');
+  if(folder==='layouts') renderLayoutSlots();
+  if(folder==='data') refreshExportFilename();
+  if(folder==='pdf') refreshPDFFilename();
+}
+
 function refreshExportFilename(){
-  const inp=document.getElementById('export-filename');
+  const inp=document.getElementById('fm-export-filename');
   if(!inp||inp.value)return;
   const s=curSessObj();
   inp.placeholder=`lm_${(s.name||'session').replace(/\s+/g,'_')}_${s.date||'date'} (default)`;
+}
+
+function refreshPDFFilename(){
+  const inp=document.getElementById('fm-pdf-filename');
+  if(!inp||inp.value)return;
+  const s=curSessObj();
+  inp.placeholder=`${(s.name||'session').replace(/\s+/g,'_')}_${s.date||new Date().toISOString().slice(0,10)} (default)`;
+}
+
+function printPDFNamed(){
+  const inp=document.getElementById('fm-pdf-filename');
+  const name=(inp?.value||'').trim();
+  closeM('m-files');
+  setTimeout(()=>printPDF(name),120);
 }
 
 // ═══════════════════════════════════════════════════
@@ -2729,6 +2818,7 @@ function doCloudSave(){
     schedTZ:localStorage.getItem(SCHED_TZ_KEY)||'',
     color:localStorage.getItem('lm_color')||'',
     fz:localStorage.getItem(FZ_KEY)||'',
+    namedLayouts:getNamedLayouts(),
     updated:Date.now()
   };
   fbDB.collection('huds').doc(fbUser.uid).set(payload)
@@ -2763,6 +2853,7 @@ function loadFromCloud(){
         if(d.schedTZ) localStorage.setItem(SCHED_TZ_KEY,d.schedTZ);
         if(d.color) localStorage.setItem('lm_color',d.color);
         if(d.fz) localStorage.setItem(FZ_KEY,String(d.fz));
+        if(d.namedLayouts?.length) localStorage.setItem(NAMED_LAYOUTS_KEY,JSON.stringify(d.namedLayouts));
         lastSyncTime=new Date();
         resolve(true);
       })
