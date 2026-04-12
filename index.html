@@ -175,7 +175,7 @@ input,textarea,button,select{font-family:inherit}
 .edit-on .wbtn{display:flex}
 
 /* Widget body */
-.wb{flex:1;overflow-y:auto;overflow-x:hidden;padding:6px;scrollbar-width:thin;scrollbar-color:var(--bd) transparent;display:flex;flex-direction:column;min-height:0}
+.wb{flex:1;overflow-y:auto;overflow-x:hidden;padding:6px;scrollbar-width:thin;scrollbar-color:var(--bd) transparent;display:flex;flex-direction:column;min-height:0;gap:5px}
 .wb::-webkit-scrollbar{width:3px}
 .wb::-webkit-scrollbar-thumb{background:var(--bd)}
 /* Notes widget: canvas fills body height */
@@ -221,17 +221,23 @@ input,textarea,button,select{font-family:inherit}
   border-left:1px solid var(--bd);border-right:1px solid var(--bd)}
 
 /* TIRE 2x2 GRID */
-.t2x2{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.t2x2{display:grid;grid-template-columns:1fr 1fr;gap:4px;flex:1;min-height:0;align-content:stretch}
 .tc{background:var(--p2);border:1px solid var(--bd);border-radius:4px;padding:4px 5px}
-.tc .cl{font-size:0.77rem;font-weight:800;color:var(--acc);margin-bottom:3px;letter-spacing:1px}
+.tc .cl{font-size:0.77rem;font-weight:800;color:var(--acc);margin-bottom:3px;letter-spacing:1px;flex-shrink:0}
+/* Inside t2x2: cells become flex columns so steppers can fill */
+.t2x2 .tc{display:flex;flex-direction:column;min-height:0}
+/* Stepper/frac-stepper inside a 2x2 cell fills the available cell height */
+.t2x2 .tc>.sp,.t2x2 .tc>.fsp{flex:1;min-height:var(--ih)}
+/* Tire temp inner row (I/M/O) fills cell height */
+.t2x2 .tc>.tt-row{flex:1;display:flex;align-items:stretch;min-height:0}
 /* Compact tire temp layout */
 .tt-row{display:flex;gap:3px}
 .tt-cell{flex:1;min-width:0}
 .tt-lbl{font-size:0.54rem;font-weight:800;color:var(--dim);text-align:center;text-transform:uppercase;letter-spacing:.3px;margin-bottom:1px}
 
 /* BUILDS DISPLAY */
-.builds-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
-.build-cell{background:var(--p2);border:1px solid var(--bd);border-radius:4px;padding:4px 6px;text-align:center}
+.builds-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;flex:1;min-height:0;align-content:stretch}
+.build-cell{background:var(--p2);border:1px solid var(--bd);border-radius:4px;padding:4px 6px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center}
 .build-lbl{font-size:0.62rem;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
 .build-val{font-size:1.08rem;font-weight:900;margin-top:2px}
 .build-val.pos{color:var(--grn)}
@@ -239,8 +245,8 @@ input,textarea,button,select{font-family:inherit}
 .build-val.zero{color:var(--dim)}
 
 /* STAGGER CALC */
-.stag-calc{background:var(--p2);border:1px solid var(--bd);border-radius:4px;padding:6px;margin-top:6px}
-.stag-row{display:flex;justify-content:space-around}
+.stag-calc{background:var(--p2);border:1px solid var(--bd);border-radius:4px;padding:6px;flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0}
+.stag-row{display:flex;justify-content:space-around;flex:1;align-items:center}
 .stag-item{text-align:center}
 .stag-item .sl{font-size:0.62rem;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
 .stag-item .sv{font-size:1.15rem;font-weight:900;color:var(--accH);margin-top:2px}
@@ -272,11 +278,15 @@ input,textarea,button,select{font-family:inherit}
 .notes-lbl-btn:active{opacity:.8}
 
 /* CROSS MEMBER DISPLAY */
-.xmem-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.xmem-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:1;min-height:0;align-content:stretch}
+.xmem-grid .field{display:flex;flex-direction:column;min-height:0}
+.xmem-grid .field>.fsp,.xmem-grid .field>.sp{flex:1;min-height:var(--ih)}
 
 /* SECTION LABEL */
 .sec{font-size:0.62rem;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:1px;
-  margin-bottom:4px;padding-bottom:2px;border-bottom:1px solid var(--bd)}
+  margin-bottom:4px;padding-bottom:2px;border-bottom:1px solid var(--bd);flex-shrink:0}
+/* When .sec is a direct child of .wb the gap handles spacing */
+.wb>.sec{margin-bottom:0}
 .sec.nb{border-bottom:none;padding-bottom:0;margin-bottom:3px}
 
 /* GRID HELPERS */
@@ -568,7 +578,7 @@ select.mi{cursor:pointer}
             <div class="field" style="flex:2;min-width:120px"><label>Session Name</label><input class="mi" id="si-name" type="text" placeholder="Practice 1" style="margin-bottom:0"></div>
             <div class="field" style="flex:1;min-width:110px"><label>Date</label><input class="mi" id="si-date" type="date" style="margin-bottom:0"></div>
             <div class="field" style="flex:1;min-width:90px"><label>Start Time</label><input class="mi" id="si-start" type="time" style="margin-bottom:0"></div>
-            <div class="field" style="flex:1;min-width:80px"><label>Duration (min)</label><input class="mi" id="si-dur" type="number" placeholder="30" min="1" style="margin-bottom:0"></div>
+            <div class="field" style="flex:1;min-width:110px"><label>Duration (min)</label><input class="mi" id="si-dur" type="number" placeholder="30" min="1" style="margin-bottom:0"></div>
             <button class="tb red" style="min-height:34px;white-space:nowrap;flex-shrink:0" onclick="addSchedItem()">+ Add</button>
             <button class="tb" style="min-height:34px;color:#ff6060;flex-shrink:0" onclick="clearSchedule()">Clear All</button>
           </div>
@@ -813,8 +823,9 @@ function formatTime(sec){
 
 // Widget definitions
 const STD=[
-  {id:'stagger',     title:'Stagger',           fn:wStagger     },
-  {id:'cold_psi',    title:'Cold Tire PSI',     fn:wColdPSI     },
+  {id:'stagger',       title:'Stagger',           fn:wStagger       },
+  {id:'stag_result',   title:'Stagger Result',    fn:wStaggerResult },
+  {id:'cold_psi',      title:'Cold Tire PSI',     fn:wColdPSI       },
   {id:'hot_psi',     title:'Hot Tire PSI',      fn:wHotPSI      },
   {id:'builds',      title:'Builds',            fn:wBuilds      },
   {id:'chassis',     title:'Chassis Setup',     fn:wChassis     },
@@ -829,7 +840,8 @@ const STD=[
 
 // Default layout — all hidden (blank canvas). Positions used by resetLayout only.
 const DEF={
-  stagger:     {x:210,y:0,  w:300,h:200,v:false,type:'stagger'     },
+  stagger:     {x:210,y:0,  w:300,h:180,v:false,type:'stagger'     },
+  stag_result: {x:210,y:190,w:300,h:90, v:false,type:'stag_result' },
   cold_psi:    {x:520,y:0,  w:270,h:170,v:false,type:'cold_psi'    },
   hot_psi:     {x:520,y:180,w:270,h:170,v:false,type:'hot_psi'     },
   builds:      {x:520,y:360,w:270,h:110,v:false,type:'builds'      },
@@ -1396,14 +1408,21 @@ function wStagger(r){
     </div>`).join('');
   return`
     <div class="sec">Tire Circumference (in)</div>
-    <div class="t2x2 mb">${tireHtml}</div>
-    <div class="stag-calc">
-      <div class="sec">Calculated Stagger</div>
-      <div class="stag-row">
-        <div class="stag-item"><div class="sl">Front</div><div class="sv" id="stag_f">--</div></div>
-        <div class="stag-item"><div class="sl">Rear</div><div class="sv" id="stag_r">--</div></div>
-      </div>
-    </div>`;
+    <div class="t2x2">${tireHtml}</div>`;
+}
+
+function wStaggerResult(r){
+  return`<div class="sec">Calculated Stagger</div>
+  <div class="stag-row">
+    <div class="stag-item">
+      <div class="sl">Front</div>
+      <div class="sv" id="stag_f" style="font-size:1.54rem">--</div>
+    </div>
+    <div class="stag-item">
+      <div class="sl">Rear</div>
+      <div class="sv" id="stag_r" style="font-size:1.54rem">--</div>
+    </div>
+  </div>`;
 }
 
 function wColdPSI(r){
@@ -2546,6 +2565,7 @@ function addSchedItem(){
   renderSchedList();
   document.getElementById('si-name').value='';
   tickClock();
+  queueCloudSave();
   toast(name+' added to schedule ('+tz+')');
 }
 
@@ -2555,11 +2575,12 @@ function deleteSchedItem(i){
   saveSchedule(sched);
   renderSchedList();
   tickClock();
+  queueCloudSave();
 }
 
 function clearSchedule(){
   if(!confirm('Clear entire day schedule?'))return;
-  saveSchedule([]);renderSchedList();tickClock();toast('Schedule cleared');
+  saveSchedule([]);renderSchedList();tickClock();queueCloudSave();toast('Schedule cleared');
 }
 
 // ═══════════════════════════════════════════════════
